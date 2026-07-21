@@ -1,0 +1,50 @@
+# https://dart.dev/guides/libraries/private-files
+
+# Miscellaneous
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Output of the public medicine cache
+.packages
+.pub-cache/
+.pub/
+
+# Tooling files
+.dart_tool/
+
+# Build artifacts
+build/
+
+# Android-specific files
+android/local.properties
+android/key.properties
+android/app/src/main/res/values/strings.xml
+*.keystore
+*.jks
+
+# iOS-specific files
+ios/.snapshots/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/derived_data/
+ios/Pods/
+ios/.symlinks/
+*.xcworkspace
+*.xcuserdatad
+*.xsaccess
+
+# IDE-specific files
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+.history/

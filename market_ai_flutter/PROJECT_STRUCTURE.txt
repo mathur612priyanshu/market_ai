@@ -1,0 +1,18 @@
+market_ai_flutter/
+├── lib/
+│   ├── main.dart
+│   ├── routes.dart
+│   ├── theme/app_theme.dart
+│   ├── widgets/common_widgets.dart
+│   └── screens/
+│       ├── onboarding_screens.dart
+│       ├── dashboard_screen.dart
+│       ├── ai_screens.dart
+│       ├── business_screens.dart
+│       └── reports_settings_screens.dart
+├── test/widget_test.dart
+├── pubspec.yaml
+├── analysis_options.yaml
+├── setup_and_run.bat
+├── setup_and_run.sh
+└── README.md
