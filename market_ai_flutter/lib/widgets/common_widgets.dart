@@ -464,15 +464,34 @@ class StatusChip extends StatelessWidget {
       child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700)),
     );
   }
-}
-
-class MarketingPostCard extends StatelessWidget {
-  const MarketingPostCard({super.key, this.compact = false});
+}class MarketingPostCard extends StatelessWidget {
+  const MarketingPostCard({super.key, this.compact = false, this.imageUrl});
   final bool compact;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
     final height = compact ? 150.0 : 250.0;
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return Container(
+        height: height,
+        width: double.infinity,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Image.network(
+          imageUrl!,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildDefaultCard(context, height),
+        ),
+      );
+    }
+    return _buildDefaultCard(context, height);
+  }
+
+  Widget _buildDefaultCard(BuildContext context, double height) {
     return Container(
       height: height,
       clipBehavior: Clip.antiAlias,

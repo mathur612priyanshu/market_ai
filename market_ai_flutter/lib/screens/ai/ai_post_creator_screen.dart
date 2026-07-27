@@ -1,25 +1,81 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/auth_provider.dart';
 import '../../routes.dart';
+import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-class AiPostCreatorScreen extends StatefulWidget {
+class AiPostCreatorScreen extends ConsumerStatefulWidget {
   const AiPostCreatorScreen({super.key});
 
   @override
-  State<AiPostCreatorScreen> createState() => _AiPostCreatorScreenState();
+  ConsumerState<AiPostCreatorScreen> createState() => _AiPostCreatorScreenState();
 }
 
-class _AiPostCreatorScreenState extends State<AiPostCreatorScreen> {
+class _AiPostCreatorScreenState extends ConsumerState<AiPostCreatorScreen> {
   final controller = TextEditingController(text: 'Create a post about digital marketing benefits for business');
   String platform = 'Facebook';
   String type = 'Image Post';
   String tone = 'Professional';
+  bool isGenerating = false;
 
   @override
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _generatePost() async {
+    if (controller.text.trim().isEmpty) {
+      showAppSnackBar(context, 'Describe what you want to create a post about');
+      return;
+    }
+
+    final session = ref.read(authProvider);
+    final token = session.token;
+    if (token == null) {
+      showAppSnackBar(context, 'Authentication session expired. Please login again.');
+      return;
+    }
+
+    setState(() => isGenerating = true);
+    try {
+      final res = await PostService.generateAiPost(
+        token: token,
+        prompt: controller.text.trim(),
+        platform: platform,
+        tone: tone,
+        type: type,
+      );
+
+      if (res['success'] == true) {
+        if (mounted) {
+          Navigator.pushNamed(
+            context,
+            AppRoutes.generatedPost,
+            arguments: {
+              'platform': platform,
+              'caption': res['caption'] ?? '',
+              'hashtags': res['hashtags'] ?? '',
+              'creativeUrl': res['creativeUrl'] ?? '',
+            },
+          );
+        }
+      } else {
+        if (mounted) {
+          showAppSnackBar(context, res['error'] ?? 'Failed to generate post');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Error communicating with server: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isGenerating = false);
+      }
+    }
   }
 
   @override
@@ -58,11 +114,23 @@ class _AiPostCreatorScreenState extends State<AiPostCreatorScreen> {
                               ),
                             ),
                           ),
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(9)),
-                            child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                          InkWell(
+                            onTap: isGenerating ? null : _generatePost,
+                            borderRadius: BorderRadius.circular(9),
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: isGenerating ? AppColors.muted : AppColors.primary,
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: isGenerating
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                            ),
                           ),
                         ],
                       ),
@@ -125,8 +193,8 @@ class _AiPostCreatorScreenState extends State<AiPostCreatorScreen> {
                     ),
                     const SizedBox(height: 32),
                     PrimaryButton(
-                      label: 'Generate Post',
-                      onPressed: () => Navigator.pushNamed(context, AppRoutes.generatedPost),
+                      label: isGenerating ? 'Generating Post...' : 'Generate Post',
+                      onPressed: isGenerating ? () {} : _generatePost,
                     ),
                   ],
                 ),

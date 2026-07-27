@@ -69,4 +69,15 @@ class AuthService {
     final response = await http.Response.fromStream(streamedResponse);
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> fetchSocialStatus(String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/auth/social-status'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
 }
