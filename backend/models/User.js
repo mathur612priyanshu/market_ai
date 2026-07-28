@@ -31,6 +31,26 @@ const User = sequelize.define('User', {
   profilePicture: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  businessName: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  businessAddress: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  businessWebsite: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  businessServices: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  businessLogo: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   timestamps: true

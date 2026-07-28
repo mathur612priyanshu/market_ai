@@ -14,8 +14,17 @@ router.post('/verify-otp', authController.verifyOtp);
 // Route for updating profile (Protected)
 router.post('/update-profile', authMiddleware, authController.updateProfile);
 
+// Route for getting current user profile (Protected)
+router.get('/me', authMiddleware, authController.getCurrentUser);
+
 // Route for uploading profile photo (Protected, Multipart)
 router.post('/upload-avatar', authMiddleware, uploadMiddleware.single('avatar'), authController.uploadAvatar);
+
+// Route for updating business details (Protected)
+router.post('/update-business', authMiddleware, authController.updateBusinessProfile);
+
+// Route for uploading business logo (Protected, Multipart)
+router.post('/upload-logo', authMiddleware, uploadMiddleware.single('logo'), authController.uploadLogo);
 
 // Routes for Facebook/Instagram OAuth Integration
 router.get('/facebook', socialController.initiateFacebook);

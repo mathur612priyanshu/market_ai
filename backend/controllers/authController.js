@@ -122,3 +122,85 @@ exports.uploadAvatar = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
+
+exports.updateBusinessProfile = async (req, res) => {
+  try {
+    const { businessName, businessAddress, businessWebsite, businessServices, businessLogo } = req.body;
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized access' });
+    }
+
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    await user.update({
+      businessName: businessName !== undefined ? businessName : user.businessName,
+      businessAddress: businessAddress !== undefined ? businessAddress : user.businessAddress,
+      businessWebsite: businessWebsite !== undefined ? businessWebsite : user.businessWebsite,
+      businessServices: businessServices !== undefined 
+        ? (Array.isArray(businessServices) ? JSON.stringify(businessServices) : businessServices) 
+        : user.businessServices,
+      businessLogo: businessLogo !== undefined ? businessLogo : user.businessLogo
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Business profile updated successfully',
+      user
+    });
+  } catch (error) {
+    console.error('Error in updateBusinessProfile controller:', error.message);
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+exports.uploadLogo = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+    await user.update({ businessLogo: fileUrl });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Business logo uploaded successfully',
+      businessLogo: fileUrl,
+      user
+    });
+  } catch (error) {
+    console.error('Error in uploadLogo controller:', error.message);
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+exports.getCurrentUser = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized access' });
+    }
+
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error('Error in getCurrentUser controller:', error.message);
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+

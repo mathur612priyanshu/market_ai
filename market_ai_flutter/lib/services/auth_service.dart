@@ -80,4 +80,65 @@ class AuthService {
     );
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> getProfile(String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/auth/me'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> updateBusinessProfile({
+    required String token,
+    required String businessName,
+    required String businessAddress,
+    String? businessWebsite,
+    List<String>? businessServices,
+    String? businessLogo,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/auth/update-business'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'businessName': businessName,
+        'businessAddress': businessAddress,
+        'businessWebsite': businessWebsite,
+        'businessServices': businessServices,
+        'businessLogo': businessLogo,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> uploadBusinessLogo({
+    required String token,
+    required String imagePath,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/api/auth/upload-logo'),
+    );
+
+    request.headers['Authorization'] = 'Bearer $token';
+
+    final extension = imagePath.split('.').last.toLowerCase();
+    final mimeSub = extension == 'png' ? 'png' : (extension == 'gif' ? 'gif' : 'jpeg');
+
+    request.files.add(await http.MultipartFile.fromPath(
+      'logo',
+      imagePath,
+      contentType: MediaType('image', mimeSub),
+    ));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    return jsonDecode(response.body);
+  }
 }
