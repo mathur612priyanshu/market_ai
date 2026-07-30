@@ -50,4 +50,18 @@ class PostService {
     );
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> uploadPostMedia({
+    required String token,
+    required String filePath,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/posts/upload-media');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(await http.MultipartFile.fromPath('file', filePath));
+    
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    return jsonDecode(response.body);
+  }
 }

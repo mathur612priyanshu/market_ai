@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/auth_provider.dart';
 import '../../routes.dart';
+import '../../services/competitor_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-class AiSearchScreen extends StatefulWidget {
+class AiSearchScreen extends ConsumerStatefulWidget {
   const AiSearchScreen({super.key});
 
   @override
-  State<AiSearchScreen> createState() => _AiSearchScreenState();
+  ConsumerState<AiSearchScreen> createState() => _AiSearchScreenState();
 }
 
-class _AiSearchScreenState extends State<AiSearchScreen> {
+class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
   final controller = TextEditingController(text: 'Analyze my top 3 competitors and suggest ad strategy');
+  bool isLoading = false;
 
   @override
   void dispose() {
@@ -19,12 +23,47 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
     super.dispose();
   }
 
-  void _analyze() {
+  Future<void> _analyze() async {
     if (controller.text.trim().isEmpty) {
       showAppSnackBar(context, 'Describe what you want MarketAI to analyze');
       return;
     }
-    Navigator.pushNamed(context, AppRoutes.competitorAnalysis);
+
+    final token = ref.read(authProvider).token;
+    if (token == null) {
+      showAppSnackBar(context, 'Session expired. Please login again.');
+      return;
+    }
+
+    setState(() => isLoading = true);
+    try {
+      final res = await CompetitorService.analyzeCompetitors(
+        token: token,
+        prompt: controller.text.trim(),
+      );
+
+      if (res['success'] == true && res['analysis'] != null) {
+        if (mounted) {
+          Navigator.pushNamed(
+            context,
+            AppRoutes.competitorAnalysis,
+            arguments: Map<String, dynamic>.from(res['analysis']),
+          );
+        }
+      } else {
+        if (mounted) {
+          showAppSnackBar(context, res['error'] ?? 'Analysis failed. Please try again.');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Error running competitor analysis: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
   }
 
   @override
@@ -60,6 +99,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                               controller: controller,
                               minLines: 3,
                               maxLines: 5,
+                              enabled: !isLoading,
                               decoration: const InputDecoration(
                                 hintText: 'Ask MarketAI...',
                                 border: InputBorder.none,
@@ -72,7 +112,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                           ),
                           const SizedBox(width: 8),
                           InkWell(
-                            onTap: _analyze,
+                            onTap: isLoading ? null : _analyze,
                             borderRadius: BorderRadius.circular(10),
                             child: Container(
                               width: 46,
@@ -81,7 +121,15 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                                 color: AppColors.primary,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.send_rounded, color: Colors.white, size: 21),
+                              child: isLoading
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.send_rounded, color: Colors.white, size: 21),
                             ),
                           ),
                         ],
@@ -95,10 +143,12 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                         padding: const EdgeInsets.only(bottom: 9),
                         child: AppCard(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          onTap: () {
-                            controller.text = example;
-                            controller.selection = TextSelection.collapsed(offset: controller.text.length);
-                          },
+                          onTap: isLoading
+                              ? null
+                              : () {
+                                  controller.text = example;
+                                  controller.selection = TextSelection.collapsed(offset: controller.text.length);
+                                },
                           child: Row(
                             children: [
                               const Icon(Icons.auto_awesome_outlined, size: 18, color: AppColors.muted),

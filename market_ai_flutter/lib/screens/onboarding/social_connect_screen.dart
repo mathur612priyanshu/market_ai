@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -95,6 +96,19 @@ class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> {
     );
   }
 
+  void _showCreatePageDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _CreatePageDialog(
+        token: ref.read(authProvider).token ?? '',
+        onSuccess: () {
+          _checkStatus();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,6 +142,14 @@ class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> {
                   onPressed: _connectFacebook,
                 ),
               ),
+              if (facebookConnected) ...[
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _showCreatePageDialog,
+                  icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                  label: const Text('Create New Facebook Page', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                ),
+              ],
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
@@ -201,5 +223,376 @@ class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> {
         ),
       ),
     );
+  }
+}
+
+class _CreatePageDialog extends StatefulWidget {
+  const _CreatePageDialog({required this.token, required this.onSuccess});
+  final String token;
+  final VoidCallback onSuccess;
+
+  @override
+  State<_CreatePageDialog> createState() => _CreatePageDialogState();
+}
+
+class _CreatePageDialogState extends State<_CreatePageDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final nameController = TextEditingController();
+  final aboutController = TextEditingController();
+  final categorySearchController = TextEditingController();
+  String? categoryId;
+  bool isCreating = false;
+  bool isLoadingCategories = true;
+  bool showSuggestions = false;
+  List<dynamic> categories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final res = await AuthService.fetchFacebookCategories(widget.token);
+      if (res['success'] == true && mounted) {
+        setState(() {
+          categories = res['categories'] ?? [];
+          if (categories.isNotEmpty) {
+            categoryId = categories.first['id']?.toString();
+            categorySearchController.text = categories.first['name'] ?? '';
+          }
+          isLoadingCategories = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoadingCategories = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    aboutController.dispose();
+    categorySearchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    final uri = Uri.parse(urlString);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  void _showMetaRestrictionDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 40),
+        title: const Text('Meta Platform Restriction', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'While your app is in Development Mode, Meta restricts programmatic Page creation via API to official "Test Users". Real accounts (even Admin/Developers) cannot create pages via the API.\n\n'
+          'Would you like to open Facebook in your browser to create a Page manually, then sync it back here?',
+          style: TextStyle(fontSize: 11.5, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext); // Close alert dialog
+              Navigator.pop(context); // Close create page dialog
+            },
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext); // Close alert dialog
+              Navigator.pop(context); // Close create page dialog
+              _launchUrl('https://www.facebook.com/pages/create/');
+            },
+            child: const Text('Create Manually'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (categoryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a valid category from the suggestions list')),
+      );
+      return;
+    }
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => isCreating = true);
+    try {
+      final res = await AuthService.createFacebookPage(
+        token: widget.token,
+        name: nameController.text.trim(),
+        categoryId: categoryId!,
+        about: aboutController.text.trim(),
+      );
+
+      if (res['success'] == true && mounted) {
+        widget.onSuccess();
+        Navigator.pop(context); // Close dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully created Facebook page: ${res['pageName']}')),
+        );
+      } else {
+        if (mounted) {
+          final errorMsg = res['error'] ?? 'Page creation failed.';
+          if (errorMsg.toLowerCase().contains('test users')) {
+            _showMetaRestrictionDialog();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(errorMsg)),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating page: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isCreating = false);
+      }
+    }
+  }
+
+  void _selectCategoryBottomSheet() {
+    final debouncer = _Debouncer(milliseconds: 300);
+    List<dynamic> filtered = List.from(categories);
+    bool isSearching = false;
+    
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.75,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (scrollContext, scrollController) {
+            return StatefulBuilder(
+              builder: (context, setSheetState) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.border,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Select Category',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Search business category...',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: isSearching
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Padding(
+                                    padding: EdgeInsets.all(10),
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                  ),
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                        onChanged: (val) {
+                          setSheetState(() {
+                            isSearching = true;
+                          });
+                          debouncer.run(() async {
+                            try {
+                              final res = await AuthService.fetchFacebookCategories(
+                                widget.token,
+                                query: val.trim(),
+                              );
+                              if (res['success'] == true && mounted) {
+                                setSheetState(() {
+                                  filtered = res['categories'] ?? [];
+                                  isSearching = false;
+                                });
+                              }
+                            } catch (_) {
+                              if (mounted) {
+                                setSheetState(() {
+                                  isSearching = false;
+                                });
+                              }
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: scrollController,
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final cat = filtered[index];
+                            final isSelected = categoryId == cat['id']?.toString();
+                            return ListTile(
+                              title: Text(
+                                cat['name'] ?? '',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected ? AppColors.primary : Colors.black87,
+                                ),
+                              ),
+                              trailing: isSelected
+                                  ? const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20)
+                                  : null,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              onTap: () {
+                                setState(() {
+                                  categoryId = cat['id']?.toString();
+                                  categorySearchController.text = cat['name'] ?? '';
+                                });
+                                Navigator.pop(sheetContext);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create Facebook Page', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      content: isLoadingCategories
+          ? const SizedBox(
+              height: 100,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                    SizedBox(height: 10),
+                    Text('Loading Facebook categories...', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                  ],
+                ),
+              ),
+            )
+          : SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Create a new Page directly on your Facebook profile.',
+                      style: TextStyle(fontSize: 11, color: AppColors.muted),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Page Name', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: nameController,
+                      enabled: !isCreating,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. My Gym Center',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Category', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: categorySearchController,
+                      readOnly: true,
+                      enabled: !isCreating,
+                      onTap: _selectCategoryBottomSheet,
+                      decoration: const InputDecoration(
+                        hintText: 'Tap to select category...',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        suffixIcon: Icon(Icons.arrow_drop_down_rounded),
+                      ),
+                      validator: (val) => categoryId == null ? 'Category is required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Description (About)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: aboutController,
+                      enabled: !isCreating,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: 'Short description of your page',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+      actions: [
+        TextButton(
+          onPressed: isCreating ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: (isCreating || isLoadingCategories) ? null : _submit,
+          child: isCreating
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+class _Debouncer {
+  final int milliseconds;
+  Timer? _timer;
+
+  _Debouncer({required this.milliseconds});
+
+  void run(VoidCallback action) {
+    _timer?.cancel();
+    _timer = Timer(Duration(milliseconds: milliseconds), action);
   }
 }

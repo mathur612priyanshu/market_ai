@@ -141,4 +141,40 @@ class AuthService {
     final response = await http.Response.fromStream(streamedResponse);
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> createFacebookPage({
+    required String token,
+    required String name,
+    required String categoryId,
+    String? about,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/auth/facebook/create-page'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'name': name,
+        'categoryId': categoryId,
+        'about': about,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> fetchFacebookCategories(String token, {String? query}) async {
+    final uri = Uri.parse('$baseUrl/api/auth/facebook/categories').replace(
+      queryParameters: query != null && query.isNotEmpty ? {'q': query} : null,
+    );
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    // print('fetchFacebookCategories response: ${response.body}');
+    return jsonDecode(response.body);
+  }
 }

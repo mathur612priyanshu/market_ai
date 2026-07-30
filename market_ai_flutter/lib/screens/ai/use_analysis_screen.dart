@@ -8,6 +8,14 @@ class UseAnalysisScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Retrieve the dynamically generated recommended ad structure from route arguments
+    final recommendedAd = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+
+    final headline = recommendedAd?['headline'] ?? 'Get More Leads for Your Business';
+    final primaryText = recommendedAd?['primaryText'] ?? 'We help you grow your business with result-driven digital marketing strategies.';
+    final callToAction = recommendedAd?['callToAction'] ?? 'Get Free Consultation';
+    final landingPage = recommendedAd?['landingPage'] ?? '/free-consultation';
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -29,23 +37,24 @@ class UseAnalysisScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(17),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('Ad Structure', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 18),
-                          _AdStructureItem(title: 'Headline', value: 'Get More Leads for Your Business'),
-                          _AdStructureItem(
-                            title: 'Primary Text',
-                            value: 'We help you grow your business with result-driven digital marketing strategies.',
-                          ),
-                          _AdStructureItem(title: 'Call to Action', value: 'Get Free Consultation'),
-                          _AdStructureItem(title: 'Landing Page', value: '/free-consultation', last: true),
+                        children: [
+                          const Text('Ad Structure', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 18),
+                          _AdStructureItem(title: 'Headline', value: headline),
+                          _AdStructureItem(title: 'Primary Text', value: primaryText),
+                          _AdStructureItem(title: 'Call to Action', value: callToAction),
+                          _AdStructureItem(title: 'Landing Page', value: landingPage, last: true),
                         ],
                       ),
                     ),
                     const SizedBox(height: 25),
                     PrimaryButton(
                       label: 'Proceed to Ad Setup',
-                      onPressed: () => Navigator.pushNamed(context, AppRoutes.adSetup),
+                      onPressed: () => Navigator.pushNamed(
+                        context,
+                        AppRoutes.adSetup,
+                        arguments: recommendedAd,
+                      ),
                     ),
                   ],
                 ),

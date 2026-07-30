@@ -23,6 +23,7 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
   late String caption;
   late String hashtags;
   late String creativeUrl;
+  List<dynamic> mediaList = [];
   bool isInitialized = false;
 
   @override
@@ -33,9 +34,53 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
       platform = args['platform'] as String;
       caption = args['caption'] as String;
       hashtags = args['hashtags'] as String;
-      creativeUrl = args['creativeUrl'] as String? ?? '';
+      
+      if (args['mediaList'] != null) {
+        mediaList = args['mediaList'] as List<dynamic>;
+      } else if (args['creativeUrl'] != null) {
+        mediaList = [
+          {'url': args['creativeUrl'] as String, 'type': 'image'}
+        ];
+      }
+      
+      creativeUrl = mediaList.isNotEmpty ? (mediaList.first['url'] as String? ?? '') : '';
       isInitialized = true;
     }
+  }
+
+  Widget _buildPreviewCard() {
+    if (mediaList.isEmpty) {
+      return const MarketingPostCard(compact: true);
+    }
+    final firstItem = mediaList.first;
+    final String? url = firstItem['url'] as String?;
+    final bool isVideo = firstItem['type'] == 'video' || (url != null && (url.toLowerCase().contains('video') || url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.mov') || url.toLowerCase().endsWith('.avi')));
+    
+    if (isVideo && url != null && url.isNotEmpty) {
+      return Container(
+        height: 150,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          color: Colors.black87,
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.video_library_rounded, color: Colors.white, size: 36),
+              SizedBox(height: 8),
+              Text(
+                'Video Reel Attachment',
+                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return MarketingPostCard(compact: true, imageUrl: creativeUrl);
   }
 
   String get dateText {
@@ -208,7 +253,7 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
                     ],
                     const SizedBox(height: 20),
                     const FormLabel('Preview Card'),
-                    MarketingPostCard(compact: true, imageUrl: creativeUrl),
+                    _buildPreviewCard(),
                     const SizedBox(height: 32),
                     PrimaryButton(
                       label: isSubmitting

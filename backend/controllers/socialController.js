@@ -62,6 +62,15 @@ exports.facebookCallback = async (req, res) => {
 
     const longLivedToken = longLivedResponse.data.access_token;
 
+    // Save the User Access Token for Ad Campaign Management
+    await SocialAccount.upsert({
+      userId: parseInt(userId),
+      platform: 'facebook_user',
+      accountId: 'user_token_' + userId,
+      accountName: 'Meta User Token',
+      accessToken: longLivedToken
+    });
+
     // 3. Fetch user's managed Facebook Pages (contains Page Access Tokens)
     const pagesResponse = await axios.get('https://graph.facebook.com/v20.0/me/accounts', {
       params: {
@@ -175,14 +184,165 @@ exports.getSocialStatus = async (req, res) => {
       success: true,
       facebookConnected,
       instagramConnected,
-      accounts: accounts.map(acc => ({
-        platform: acc.platform,
-        accountName: acc.accountName,
-        profilePicture: acc.profilePicture
-      }))
+      accounts: accounts
+        .filter(acc => acc.platform !== 'facebook_user')
+        .map(acc => ({
+          platform: acc.platform,
+          accountId: acc.accountId,
+          accountName: acc.accountName,
+          profilePicture: acc.profilePicture
+        }))
     });
   } catch (error) {
     console.error('Error fetching social status:', error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Endpoint: POST /api/auth/facebook/create-page
+// Creates a new Facebook Page programmatically under the logged-in user profile
+exports.createFacebookPage = async (req, res) => {
+  const userId = req.user.id;
+  const { name, categoryId, about } = req.body;
+
+  if (!name || !categoryId) {
+    return res.status(400).json({ success: false, error: 'Page name and categoryId are required' });
+  }
+
+  try {
+    // 1. Fetch User Access Token (facebook_user)
+    const userAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook_user' }
+    });
+
+    if (!userAccount) {
+      return res.status(400).json({
+        success: false,
+        error: 'No connected Facebook Profile found. Please connect your Facebook account in Social Connect first.'
+      });
+    }
+
+    const userToken = userAccount.accessToken;
+
+    console.log(`Creating page "${name}" with categoryId "${categoryId}"...`);
+
+    // 2. POST to /me/accounts
+    const createRes = await axios.post(
+      'https://graph.facebook.com/v20.0/me/accounts',
+      {
+        name,
+        category_list: [
+          categoryId
+        ],
+        about: about || 'Business page created via MarketAI'
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${userToken}`
+        }
+      }
+    );
+
+    const newPageId = createRes.data.id;
+    const newPageToken = createRes.data.access_token;
+
+    if (!newPageId || !newPageToken) {
+      return res.status(500).json({ success: false, error: 'Facebook API failed to return page details.' });
+    }
+
+    // 3. Upsert the new page directly to SocialAccount database so they can post to it immediately!
+    await SocialAccount.upsert({
+      userId: parseInt(userId),
+      platform: 'facebook',
+      accountId: newPageId,
+      accountName: name,
+      accessToken: newPageToken
+    });
+
+    return res.status(200).json({
+      success: true,
+      pageId: newPageId,
+      pageName: name
+    });
+
+  } catch (error) {
+    console.error('Error programmatically creating Facebook page:', error.response?.data || error.message);
+    return res.status(400).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message
+    });
+  }
+};
+
+// Endpoint: GET /api/auth/facebook/categories
+// Fetches the real page categories list from Meta Graph API
+exports.getFacebookCategories = async (req, res) => {
+  const userId = req.user.id;
+  const { q } = req.query;
+
+  try {
+    const userAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook_user' }
+    });
+
+    if (!userAccount) {
+      return res.status(400).json({
+        success: false,
+        error: 'No connected Facebook Profile found.'
+      });
+    }
+
+    const userToken = userAccount.accessToken;
+
+    // Build API Params (Pass 'q' if user typed something)
+    const apiParams = {
+      access_token: userToken
+    };
+    if (q) {
+      apiParams.q = q; // <--- TEEL FIX: Meta API ko search term bhej rahe hain
+    }
+
+    // Fetch live search results directly from Meta
+    const fbRes = await axios.get('https://graph.facebook.com/v20.0/fb_page_categories', {
+      params: apiParams
+    });
+    console.log('Fetched Facebook categories from Meta API:', fbRes.data.data, 'categories');
+
+    const categories = (fbRes.data.data || []).map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      apiEnum: cat.api_enum || cat.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')
+    }));
+
+    return res.status(200).json({
+      success: true,
+      categories
+    });
+
+  } catch (error) {
+    console.error('Error fetching Facebook categories:', error.response?.data || error.message);
+    
+    // Fallback static list if Meta API fails or token expires
+    const fallbackCategories = [
+      { id: '1', name: 'Advertising/Marketing', apiEnum: 'ADVERTISING_MARKETING' },
+      { id: '2', name: 'Business Services', apiEnum: 'BUSINESS_SERVICES' },
+      { id: '3', name: 'Gym/Physical Fitness Center', apiEnum: 'GYM_PHYSICAL_FITNESS_CENTER' },
+      { id: '4', name: 'Restaurant', apiEnum: 'RESTAURANT' },
+      { id: '5', name: 'Retail Company', apiEnum: 'RETAIL_COMPANY' },
+      { id: '6', name: 'Consulting Agency', apiEnum: 'CONSULTING_AGENCY' }
+    ];
+
+    let categories = fallbackCategories;
+    if (q) {
+      const search = q.toLowerCase();
+      categories = categories.filter(cat => cat.name.toLowerCase().includes(search));
+    }
+
+    return res.status(200).json({
+      success: true,
+      categories
+    });
+  }
+};
+
+

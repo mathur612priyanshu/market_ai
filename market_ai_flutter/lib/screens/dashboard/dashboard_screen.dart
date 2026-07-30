@@ -89,7 +89,7 @@ class DashboardScreen extends StatelessWidget {
                       _QuickAction(
                         icon: Icons.analytics_outlined,
                         label: 'Competitor\nAnalysis',
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.aiSearch),
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.competitorAnalysis),
                       ),
                       _QuickAction(
                         icon: Icons.campaign_outlined,

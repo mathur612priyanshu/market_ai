@@ -30,5 +30,7 @@ router.post('/upload-logo', authMiddleware, uploadMiddleware.single('logo'), aut
 router.get('/facebook', socialController.initiateFacebook);
 router.get('/facebook/callback', socialController.facebookCallback);
 router.get('/social-status', authMiddleware, socialController.getSocialStatus);
+router.post('/facebook/create-page', authMiddleware, socialController.createFacebookPage);
+router.get('/facebook/categories', authMiddleware, socialController.getFacebookCategories);
 
 module.exports = router;

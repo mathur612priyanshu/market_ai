@@ -159,16 +159,29 @@ exports.publishOrSchedulePost = async (req, res) => {
     const fullText = hashtags ? `${caption}\n\n${hashtags}` : caption;
 
     // 3. Call Meta Graph API
+    // 3. Call Meta Graph API
     if (isFacebook) {
       if (mediaUrl) {
-        // Publish Photo Post
-        await axios.post(`https://graph.facebook.com/v20.0/${account.accountId}/photos`, null, {
-          params: {
-            url: mediaUrl,
-            message: fullText,
-            access_token: account.accessToken
-          }
-        });
+        const isVideo = mediaUrl.toLowerCase().match(/\.(mp4|mov|avi|mkv|3gp|webm)$/) || mediaUrl.includes('video');
+        if (isVideo) {
+          // Publish Video/Reel Post
+          await axios.post(`https://graph.facebook.com/v20.0/${account.accountId}/videos`, null, {
+            params: {
+              file_url: mediaUrl,
+              description: fullText,
+              access_token: account.accessToken
+            }
+          });
+        } else {
+          // Publish Photo Post
+          await axios.post(`https://graph.facebook.com/v20.0/${account.accountId}/photos`, null, {
+            params: {
+              url: mediaUrl,
+              message: fullText,
+              access_token: account.accessToken
+            }
+          });
+        }
       } else {
         // Publish Text/Feed Post
         await axios.post(`https://graph.facebook.com/v20.0/${account.accountId}/feed`, null, {
@@ -180,9 +193,16 @@ exports.publishOrSchedulePost = async (req, res) => {
       }
     } else {
       // Instagram Container Publishing (2 Steps)
+      const isVideo = mediaUrl && (mediaUrl.toLowerCase().match(/\.(mp4|mov|avi|mkv|3gp|webm)$/) || mediaUrl.includes('video'));
+      
       // Step A: Create media item container
       const containerRes = await axios.post(`https://graph.facebook.com/v20.0/${account.accountId}/media`, null, {
-        params: {
+        params: isVideo ? {
+          media_type: 'REELS',
+          video_url: mediaUrl,
+          caption: fullText,
+          access_token: account.accessToken
+        } : {
           image_url: mediaUrl || 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600', // Default placeholder if none
           caption: fullText,
           access_token: account.accessToken
