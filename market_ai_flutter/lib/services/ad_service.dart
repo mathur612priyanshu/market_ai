@@ -31,4 +31,87 @@ class AdService {
     );
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> fetchAdCampaigns({
+    required String token,
+    required String adAccountId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/campaigns?adAccountId=$adAccountId'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> toggleCampaignStatus({
+    required String token,
+    required String campaignId,
+    required String status,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/ads/campaigns/status'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'campaignId': campaignId,
+        'status': status,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> duplicateCampaign({
+    required String token,
+    required String campaignId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/ads/campaigns/duplicate'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'campaignId': campaignId,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> editCampaign({
+    required String token,
+    required String campaignId,
+    required String name,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/ads/campaigns/edit'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'campaignId': campaignId,
+        'name': name,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> getCampaignInsights({
+    required String token,
+    required String campaignId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/campaigns/insights?campaignId=$campaignId'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
 }

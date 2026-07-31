@@ -14,8 +14,9 @@ class AiSearchScreen extends ConsumerStatefulWidget {
 }
 
 class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
-  final controller = TextEditingController(text: 'Analyze my top 3 competitors and suggest ad strategy');
+  final controller = TextEditingController(text: 'Suggest dynamic social media content ideas for my niche');
   bool isLoading = false;
+  Map<String, dynamic>? searchResults;
 
   @override
   void dispose() {
@@ -35,29 +36,31 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
       return;
     }
 
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      searchResults = null;
+    });
+
     try {
-      final res = await CompetitorService.analyzeCompetitors(
+      final res = await CompetitorService.performAiSearch(
         token: token,
         prompt: controller.text.trim(),
       );
 
-      if (res['success'] == true && res['analysis'] != null) {
+      if (res['success'] == true && res['results'] != null) {
         if (mounted) {
-          Navigator.pushNamed(
-            context,
-            AppRoutes.competitorAnalysis,
-            arguments: Map<String, dynamic>.from(res['analysis']),
-          );
+          setState(() {
+            searchResults = Map<String, dynamic>.from(res['results']);
+          });
         }
       } else {
         if (mounted) {
-          showAppSnackBar(context, res['error'] ?? 'Analysis failed. Please try again.');
+          showAppSnackBar(context, res['error'] ?? 'Search failed. Please try again.');
         }
       }
     } catch (e) {
       if (mounted) {
-        showAppSnackBar(context, 'Error running competitor analysis: $e');
+        showAppSnackBar(context, 'Error running AI search: $e');
       }
     } finally {
       if (mounted) {
@@ -69,22 +72,26 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final examples = [
-      'Analyze my competitors',
-      'Best ad strategy for my business',
-      'Improve my ROI',
-      'Content ideas for social media',
+      'Suggest local ad strategies for my shop',
+      'High-impact keyword suggestions for my service',
+      'Explain content formats to double my CTR',
+      'What social channels work best for my industry?',
     ];
+
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
-              child: ScreenHeader(title: 'AI Search', subtitle: 'Ask anything about your business,\ncompetitors, or marketing.'),
+              child: ScreenHeader(
+                title: 'AI Search',
+                subtitle: 'Ask anything about your business,\ncompetitors, or marketing.',
+              ),
             ),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 26, 18, 24),
+                padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -135,7 +142,93 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 24),
+                    
+                    // Dynamic Search Results Card
+                    if (searchResults != null) ...[
+                      AppCard(
+                        padding: const EdgeInsets.all(16),
+                        borderColor: AppColors.primary.withOpacity(0.3),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 20),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'MarketAI Response',
+                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.text),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              searchResults!['summary']?.toString() ?? '',
+                              style: const TextStyle(fontSize: 12.5, height: 1.45, color: AppColors.text),
+                            ),
+                            if (searchResults!['insights'] != null) ...[
+                              const SizedBox(height: 16),
+                              const Divider(),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Key Insights',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                              ),
+                              const SizedBox(height: 8),
+                              ...(searchResults!['insights'] as List<dynamic>).map(
+                                (ins) => Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          ins.toString(),
+                                          style: const TextStyle(fontSize: 11.5, color: AppColors.text),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (searchResults!['recommendations'] != null) ...[
+                              const SizedBox(height: 16),
+                              const Divider(),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Recommended Actions',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                              ),
+                              const SizedBox(height: 8),
+                              ...(searchResults!['recommendations'] as List<dynamic>).map(
+                                (rec) => Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.tips_and_updates_outlined, color: Colors.orangeAccent, size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          rec.toString(),
+                                          style: const TextStyle(fontSize: 11.5, color: AppColors.text),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                    ],
+
                     const Text('Try these examples', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 11),
                     ...examples.map(

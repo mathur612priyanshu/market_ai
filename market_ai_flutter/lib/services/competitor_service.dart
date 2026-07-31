@@ -17,4 +17,19 @@ class CompetitorService {
     );
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> performAiSearch({
+    required String token,
+    required String prompt,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/competitor/search'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'prompt': prompt}),
+    );
+    return jsonDecode(response.body);
+  }
 }

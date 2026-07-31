@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/auth_provider.dart';
 import '../../routes.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final userName = authState.user?['name']?.toString() ?? 'User';
     return Scaffold(
       bottomNavigationBar: const MainBottomNav(currentIndex: 0),
       body: SafeArea(
@@ -27,13 +31,13 @@ class DashboardScreen extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Hello, John 👋', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 5),
-                          Text("Here's your business overview", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          Text('Hello, $userName 👋', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 5),
+                          const Text("Here's your business overview", style: TextStyle(color: Colors.white70, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -76,6 +80,44 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
+                  AppCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    borderColor: AppColors.primary.withOpacity(0.4),
+                    child: InkWell(
+                      onTap: () => Navigator.pushNamed(context, AppRoutes.campaignManagement),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.lavender,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.campaign_outlined, color: AppColors.primary, size: 28),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Campaign Manager',
+                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppColors.text),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Monitor performance, pause, duplicate, or edit your active ad campaigns.',
+                                  style: TextStyle(fontSize: 10.5, color: AppColors.muted, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   const Text('Quick Actions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 12),
                   GridView.count(
