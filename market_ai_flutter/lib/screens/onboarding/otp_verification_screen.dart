@@ -60,7 +60,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
         await prefs.setString('user', jsonEncode(user));
 
         if (mounted) {
-          Navigator.pushNamed(context, AppRoutes.profile);
+          if (user['name'] != null && user['name'].toString().isNotEmpty) {
+            Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (route) => false);
+          } else {
+            Navigator.pushReplacementNamed(context, AppRoutes.profile);
+          }
         }
       } else {
         if (mounted) {

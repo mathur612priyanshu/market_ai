@@ -9,6 +9,8 @@ class AppRoutes {
   static const competitorAnalysis = '/competitor-analysis';
   static const useAnalysis = '/use-analysis';
   static const adSetup = '/ad-setup';
+  static const createAdSet = '/create-adset';
+  static const createAd = '/create-ad';
   static const campaignManagement = '/campaign-management';
   static const aiPostCreator = '/ai-post-creator';
   static const generatedPost = '/generated-post';

@@ -1,15 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/ad_service.dart';
 import '../../routes.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  Map<String, dynamic> _stats = {
+    'totalLeads': '248',
+    'leadsChange': '+12.5%',
+    'adSpend': '₹12,500',
+    'spendChange': '-5.2%',
+    'spendPositive': false,
+    'roi': '3.8x',
+    'roiChange': '+18.8%',
+    'reach': '45.2K',
+    'reachChange': '+8.7%'
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final adAccountId = prefs.getString('ad_account_id') ?? 'act_123456789';
+      
+      final res = await AdService.fetchDashboardStats(token: token, adAccountId: adAccountId);
+      if (res['success'] == true && res['metrics'] != null && mounted) {
+        setState(() {
+          _stats = Map<String, dynamic>.from(res['metrics']);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading dashboard stats: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final userName = authState.user?['name']?.toString() ?? 'User';
     return Scaffold(
@@ -71,11 +115,28 @@ class DashboardScreen extends ConsumerWidget {
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 10,
                       childAspectRatio: 1.72,
-                      children: const [
-                        MetricCard(label: 'Total Leads', value: '248', change: '+12.5%'),
-                        MetricCard(label: 'Ad Spend', value: '₹12,500', change: '-5.2%', positive: false),
-                        MetricCard(label: 'ROI', value: '3.8x', change: '+18.8%'),
-                        MetricCard(label: 'Reach', value: '45.2K', change: '+8.7%'),
+                      children: [
+                        MetricCard(
+                          label: 'Total Leads',
+                          value: _stats['totalLeads']?.toString() ?? '0',
+                          change: _stats['leadsChange']?.toString() ?? '+0.0%',
+                        ),
+                        MetricCard(
+                          label: 'Ad Spend',
+                          value: _stats['adSpend']?.toString() ?? '₹0',
+                          change: _stats['spendChange']?.toString() ?? '+0.0%',
+                          positive: _stats['spendPositive'] == true,
+                        ),
+                        MetricCard(
+                          label: 'ROI',
+                          value: _stats['roi']?.toString() ?? '0.0x',
+                          change: _stats['roiChange']?.toString() ?? '+0.0%',
+                        ),
+                        MetricCard(
+                          label: 'Reach',
+                          value: _stats['reach']?.toString() ?? '0',
+                          change: _stats['reachChange']?.toString() ?? '+0.0%',
+                        ),
                       ],
                     ),
                   ),
@@ -84,7 +145,7 @@ class DashboardScreen extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     borderColor: AppColors.primary.withOpacity(0.4),
                     child: InkWell(
-                      onTap: () => Navigator.pushNamed(context, AppRoutes.campaignManagement),
+                      onTap: () => Navigator.pushNamed(context, AppRoutes.campaignManagement).then((_) => _loadStats()),
                       child: Row(
                         children: [
                           Container(
@@ -136,7 +197,7 @@ class DashboardScreen extends ConsumerWidget {
                       _QuickAction(
                         icon: Icons.campaign_outlined,
                         label: 'Ad Run',
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.adSetup),
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.adSetup).then((_) => _loadStats()),
                       ),
                       _QuickAction(
                         icon: Icons.people_outline_rounded,

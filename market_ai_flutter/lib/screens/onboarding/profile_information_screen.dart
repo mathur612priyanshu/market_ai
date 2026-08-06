@@ -129,7 +129,13 @@ class _ProfileInformationScreenState extends ConsumerState<ProfileInformationScr
         await prefs.setString('user', jsonEncode(data['user']));
         
         if (mounted) {
-          Navigator.pushNamed(context, AppRoutes.socialConnect);
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final isEditMode = args?['isEditMode'] == true;
+          if (isEditMode) {
+            Navigator.pop(context);
+          } else {
+            Navigator.pushReplacementNamed(context, AppRoutes.socialConnect);
+          }
         }
       } else {
         if (mounted) {
@@ -154,30 +160,36 @@ class _ProfileInformationScreenState extends ConsumerState<ProfileInformationScr
     final user = ref.watch(authProvider).user;
     final profilePic = user?['profilePicture'];
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              height: 160,
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.primaryDark, AppColors.primaryLight],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 8,
-                    top: 6,
-                    child: IconButton(
-                      onPressed: _isLoading ? null : () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 19),
-                    ),
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    final isEditMode = args?['isEditMode'] == true;
+
+    return PopScope(
+      canPop: isEditMode,
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                height: 160,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.primaryDark, AppColors.primaryLight],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                ),
+                child: Stack(
+                  children: [
+                    if (isEditMode)
+                      Positioned(
+                        left: 8,
+                        top: 6,
+                        child: IconButton(
+                          onPressed: _isLoading ? null : () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 19),
+                        ),
+                      ),
                   Align(
                     alignment: Alignment.bottomCenter,
                     child: Transform.translate(
@@ -281,6 +293,7 @@ class _ProfileInformationScreenState extends ConsumerState<ProfileInformationScr
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -27,27 +27,22 @@ class SettingsScreen extends ConsumerWidget {
                   _SettingsTile(
                     icon: Icons.person_outline_rounded,
                     label: 'Profile Information',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.profile),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.profile, arguments: {'isEditMode': true}),
                   ),
                   _SettingsTile(
                     icon: Icons.link_rounded,
                     label: 'Social Accounts',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.socialConnect),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.socialConnect, arguments: {'isEditMode': true}),
                   ),
                   _SettingsTile(
                     icon: Icons.business_outlined,
                     label: 'Business Information',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.businessDetails),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.businessDetails, arguments: {'isEditMode': true}),
                   ),
                   _SettingsTile(
                     icon: Icons.notifications_none_rounded,
                     label: 'Notification Preferences',
                     onTap: () => showAppSnackBar(context, 'Notification preferences opened'),
-                  ),
-                  _SettingsTile(
-                    icon: Icons.lock_outline_rounded,
-                    label: 'Change Password',
-                    onTap: () => _showPasswordDialog(context),
                   ),
                   _SettingsTile(
                     icon: Icons.workspace_premium_outlined,
@@ -80,33 +75,6 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showPasswordDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Change Password'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(obscureText: true, decoration: InputDecoration(labelText: 'Current password')),
-            SizedBox(height: 12),
-            TextField(obscureText: true, decoration: InputDecoration(labelText: 'New password')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              showAppSnackBar(context, 'Password updated in demo mode');
-            },
-            child: const Text('Update'),
-          ),
-        ],
       ),
     );
   }

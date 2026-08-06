@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/ad_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../routes.dart';
 
 class CampaignManagementScreen extends ConsumerStatefulWidget {
   const CampaignManagementScreen({super.key});
@@ -16,7 +18,91 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
   final adAccountIdController = TextEditingController(text: 'act_123456789');
   bool isLoading = false;
   List<dynamic> campaigns = [];
+
+  String _objectiveLabel(String objective) {
+    const labels = {
+      'OUTCOME_AWARENESS': 'Brand Awareness',
+      'OUTCOME_TRAFFIC': 'Website Traffic',
+      'OUTCOME_ENGAGEMENT': 'Engagement',
+      'OUTCOME_LEADS': 'Lead Generation',
+      'OUTCOME_APP_PROMOTION': 'App Promotion',
+      'OUTCOME_SALES': 'Sales',
+      // Older campaigns may still return Meta's legacy objective values.
+      'BRAND_AWARENESS': 'Brand Awareness',
+      'LINK_CLICKS': 'Website Traffic',
+      'LEAD_GENERATION': 'Lead Generation',
+      'APP_INSTALLS': 'App Promotion',
+      'CONVERSIONS': 'Sales',
+    };
+
+    return labels[objective.toUpperCase()] ?? objective;
+  }
   bool hasSearched = false;
+
+  List<dynamic> adAccounts = [];
+  bool isLoadingAccounts = true;
+  bool enterManually = false;
+  String? selectedAdAccountId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdAccountId();
+    _fetchAdAccounts();
+  }
+
+  Future<void> _fetchAdAccounts() async {
+    final token = ref.read(authProvider).token;
+    if (token == null) {
+      setState(() => isLoadingAccounts = false);
+      return;
+    }
+
+    try {
+      final res = await AdService.fetchUserAdAccounts(token: token);
+      if (res['success'] == true && mounted) {
+        final accounts = res['accounts'] ?? [];
+        setState(() {
+          adAccounts = accounts;
+          isLoadingAccounts = false;
+          
+          if (adAccounts.isNotEmpty) {
+            final savedId = adAccountIdController.text.trim();
+            final match = adAccounts.any((acc) => acc['id'] == savedId);
+            selectedAdAccountId = match ? savedId : adAccounts.first['id'];
+            adAccountIdController.text = selectedAdAccountId!;
+            _fetchCampaigns();
+          } else {
+            enterManually = true;
+          }
+        });
+      } else {
+        if (mounted) {
+          setState(() {
+            isLoadingAccounts = false;
+            enterManually = true;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoadingAccounts = false;
+          enterManually = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAdAccountId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedId = prefs.getString('ad_account_id');
+    if (savedId != null && savedId.isNotEmpty) {
+      setState(() {
+        adAccountIdController.text = savedId;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -46,6 +132,8 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
     try {
       final res = await AdService.fetchAdCampaigns(token: token, adAccountId: adAccountId);
       if (res['success'] == true && mounted) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('ad_account_id', adAccountId);
         setState(() {
           campaigns = res['campaigns'] ?? [];
         });
@@ -292,12 +380,12 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
                         ],
                       ),
                     ),
-                  _buildInsightItem('Total Spend', '\$${spend.toStringAsFixed(2)}', Icons.monetization_on_outlined),
+                  _buildInsightItem('Total Spend', '₹${spend.toStringAsFixed(2)}', Icons.monetization_on_outlined),
                   _buildInsightItem('Impressions', impressions.toString(), Icons.visibility_outlined),
                   _buildInsightItem('Clicks', clicks.toString(), Icons.ads_click_rounded),
                   _buildInsightItem('Reach', reach.toString(), Icons.people_outline_rounded),
                   _buildInsightItem('Click-Through Rate (CTR)', '${ctr.toStringAsFixed(2)}%', Icons.show_chart_rounded),
-                  _buildInsightItem('Cost Per Click (CPC)', '\$${cpc.toStringAsFixed(2)}', Icons.price_change_outlined),
+                  _buildInsightItem('Cost Per Click (CPC)', '₹${cpc.toStringAsFixed(2)}', Icons.price_change_outlined),
                 ],
               ),
             ),
@@ -355,32 +443,88 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: adAccountIdController,
-                      decoration: const InputDecoration(
-                        labelText: 'Ad Account ID',
-                        hintText: 'act_123456789',
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: isLoadingAccounts
+                            ? const SizedBox(
+                                height: 48,
+                                child: Center(
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                ),
+                              )
+                            : enterManually
+                                ? TextField(
+                                    controller: adAccountIdController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Ad Account ID',
+                                      hintText: 'act_123456789',
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    ),
+                                  )
+                                : DropdownButtonFormField<String>(
+                                    value: selectedAdAccountId,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Select Ad Account',
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    items: adAccounts.map<DropdownMenuItem<String>>((acc) {
+                                      return DropdownMenuItem<String>(
+                                        value: acc['id'],
+                                        child: Text(
+                                          acc['name'] ?? acc['id'],
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 12.5),
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setState(() {
+                                          selectedAdAccountId = val;
+                                          adAccountIdController.text = val;
+                                        });
+                                        _fetchCampaigns();
+                                      }
+                                    },
+                                  ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        onPressed: isLoading ? null : _fetchCampaigns,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('Sync'),
+                      ),
+                    ],
+                  ),
+                  if (!isLoadingAccounts && adAccounts.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            enterManually = !enterManually;
+                          });
+                        },
+                        child: Text(
+                          enterManually ? 'Choose from linked accounts' : 'Enter account ID manually',
+                          style: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: isLoading ? null : _fetchCampaigns,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Sync'),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -390,6 +534,17 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.pushNamed(context, AppRoutes.adSetup);
+        },
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text(
+          'Create Campaign',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        backgroundColor: AppColors.primary,
       ),
     );
   }
@@ -448,12 +603,12 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
         final id = c['id']?.toString() ?? '';
         final name = c['name']?.toString() ?? 'Unnamed Campaign';
         final status = c['status']?.toString() ?? 'PAUSED';
-        final objective = c['objective']?.toString() ?? 'OUTREACH';
+        final objective = _objectiveLabel(c['objective']?.toString() ?? '');
         final dailyBudget = c['daily_budget'] != null
-            ? '\$${(double.tryParse(c['daily_budget'].toString()) ?? 0.0) / 100.0}'
+            ? '₹${(double.tryParse(c['daily_budget'].toString()) ?? 0.0) / 100.0}'
             : null;
         final lifetimeBudget = c['lifetime_budget'] != null
-            ? '\$${(double.tryParse(c['lifetime_budget'].toString()) ?? 0.0) / 100.0}'
+            ? '₹${(double.tryParse(c['lifetime_budget'].toString()) ?? 0.0) / 100.0}'
             : null;
 
         final isActive = status.toUpperCase() == 'ACTIVE';
@@ -544,6 +699,23 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
                     tooltip: 'View Insights',
                     onPressed: () => _viewCampaignInsights(id, name),
                     icon: const Icon(Icons.bar_chart_rounded, color: AppColors.primary),
+                  ),
+                  IconButton(
+                    tooltip: 'Create Ad Set',
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.createAdSet,
+                        arguments: {
+                          'campaignId': id,
+                          'adAccountId': selectedAdAccountId,
+                          'campaignName': name,
+                          'objective': _objectiveLabel(c['objective']?.toString() ?? ''),
+                          'advantageBudgetEnabled': dailyBudget != null,
+                        },
+                      );
+                    },
+                    icon: const Icon(Icons.add_box_outlined, color: Colors.blue),
                   ),
                 ],
               ),

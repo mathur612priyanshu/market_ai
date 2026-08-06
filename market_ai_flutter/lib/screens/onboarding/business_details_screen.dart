@@ -193,7 +193,13 @@ class _BusinessDetailsScreenState extends ConsumerState<BusinessDetailsScreen> {
         ref.read(authProvider.notifier).updateUser(res['user']);
         
         if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.dashboard, (route) => false);
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final isEditMode = args?['isEditMode'] == true;
+          if (isEditMode) {
+            Navigator.pop(context);
+          } else {
+            Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.dashboard, (route) => false);
+          }
         }
       } else {
         if (mounted) {
@@ -257,36 +263,41 @@ class _BusinessDetailsScreenState extends ConsumerState<BusinessDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
-              child: ScreenHeader(title: 'Business Information', subtitle: 'Tell us about your business'),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const FormLabel('Business Logo'),
-                    InkWell(
-                      onTap: isLoading ? null : _pickLogo,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        width: double.infinity,
-                        height: 118,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.border),
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    final isEditMode = args?['isEditMode'] == true;
+
+    return PopScope(
+      canPop: isEditMode,
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                child: ScreenHeader(title: 'Business Information', subtitle: 'Tell us about your business', showBack: isEditMode),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const FormLabel('Business Logo'),
+                      InkWell(
+                        onTap: isLoading ? null : _pickLogo,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: double.infinity,
+                          height: 118,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: _buildLogoPreview(),
                         ),
-                        child: _buildLogoPreview(),
                       ),
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
                     const FormLabel('Business Name'),
                     TextField(
                       controller: nameController,
@@ -345,6 +356,7 @@ class _BusinessDetailsScreenState extends ConsumerState<BusinessDetailsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

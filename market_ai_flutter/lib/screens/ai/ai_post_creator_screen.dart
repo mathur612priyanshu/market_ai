@@ -163,7 +163,7 @@ class _AiPostCreatorScreenState extends ConsumerState<AiPostCreatorScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: ['Image Post', 'Carousel', 'Reel']
+                      children: ['Image Post']
                           .map(
                             (item) => ChoiceChip(
                               label: Text(item),

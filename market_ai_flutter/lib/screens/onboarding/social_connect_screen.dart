@@ -111,20 +111,26 @@ class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          child: Column(
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
-                ),
-              ),
-              const Spacer(flex: 2),
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    final isEditMode = args?['isEditMode'] == true;
+
+    return PopScope(
+      canPop: isEditMode,
+      child: Scaffold(
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            child: Column(
+              children: [
+                if (isEditMode)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
+                    ),
+                  ),
+              const SizedBox(height: 18),
               const Text('Connect your social accounts', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
               const SizedBox(height: 7),
               const Text(
@@ -204,23 +210,31 @@ class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> {
                   ),
                 )),
               ],
-              const Spacer(flex: 4),
+              const SizedBox(height: 38),
               const Text('You can add or remove later from settings', style: TextStyle(color: AppColors.muted, fontSize: 11)),
               const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => Navigator.pushNamed(context, AppRoutes.businessDetails),
-                child: const Text('Skip for now', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800)),
-              ),
-              if (facebookConnected || instagramConnected) ...[
+              if (!isEditMode)
+                TextButton(
+                  onPressed: () => Navigator.pushReplacementNamed(context, AppRoutes.businessDetails),
+                  child: const Text('Skip for now', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800)),
+                ),
+              if (facebookConnected || instagramConnected || isEditMode) ...[
                 const SizedBox(height: 8),
                 PrimaryButton(
-                  label: 'Continue',
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.businessDetails),
+                  label: isEditMode ? 'Close & Return' : 'Continue',
+                  onPressed: () {
+                    if (isEditMode) {
+                      Navigator.pop(context);
+                    } else {
+                      Navigator.pushReplacementNamed(context, AppRoutes.businessDetails);
+                    }
+                  },
                 ),
               ],
             ],
           ),
         ),
+      ),
       ),
     );
   }
