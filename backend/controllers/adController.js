@@ -1,5 +1,6 @@
 const axios = require('axios');
 const SocialAccount = require('../models/SocialAccount');
+const Lead = require('../models/Lead');
 
 // Keep the API version in one place. v20.0 has reached end of life, so do not
 // hard-code it in individual Graph API calls. The value can be upgraded from
@@ -899,19 +900,14 @@ exports.getCampaignInsights = async (req, res) => {
     const insightsData = response.data.data || [];
 
     if (insightsData.length === 0) {
-      const simulatedSpend = (Math.random() * 6500 + 1500).toFixed(2);
-      const simulatedClicks = Math.floor(Math.random() * 150 + 20);
-      const simulatedImpressions = Math.floor(simulatedClicks * (Math.random() * 15 + 8));
-      const simulatedReach = Math.floor(simulatedImpressions * 0.9);
-
       return res.status(200).json({
         success: true,
-        isMock: true,
+        isMock: false,
         insights: {
-          impressions: simulatedImpressions.toString(),
-          clicks: simulatedClicks.toString(),
-          spend: simulatedSpend.toString(),
-          reach: simulatedReach.toString()
+          impressions: '0',
+          clicks: '0',
+          spend: '0.00',
+          reach: '0'
         }
       });
     }
@@ -928,21 +924,16 @@ exports.getCampaignInsights = async (req, res) => {
       insights: insight
     });
   } catch (error) {
-    console.warn('Error fetching campaign insights from Meta. Serving mock performance details.', error.message);
-
-    const simulatedSpend = (Math.random() * 6500 + 1500).toFixed(2);
-    const simulatedClicks = Math.floor(Math.random() * 150 + 20);
-    const simulatedImpressions = Math.floor(simulatedClicks * (Math.random() * 15 + 8));
-    const simulatedReach = Math.floor(simulatedImpressions * 0.9);
+    console.warn('Error fetching campaign insights from Meta. Serving zero performance details.', error.message);
 
     return res.status(200).json({
       success: true,
-      isMock: true,
+      isMock: false,
       insights: {
-        impressions: simulatedImpressions.toString(),
-        clicks: simulatedClicks.toString(),
-        spend: simulatedSpend.toString(),
-        reach: simulatedReach.toString()
+        impressions: '0',
+        clicks: '0',
+        spend: '0.00',
+        reach: '0'
       }
     });
   }
@@ -1205,6 +1196,370 @@ exports.getAdvertisableApps = async (req, res) => {
       success: false,
       error: error.response?.data?.error?.message || error.message,
       apps: []
+    });
+  }
+};
+
+exports.getCampaignAdSets = async (req, res) => {
+  const userId = req.user.id;
+  const { campaignId } = req.params;
+
+  try {
+    const userAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook_user' }
+    });
+
+    if (!userAccount) {
+      return res.status(400).json({ success: false, error: 'Facebook connection not found.' });
+    }
+
+    const userToken = userAccount.accessToken;
+
+    const response = await axios.get(
+      `${META_GRAPH_BASE_URL}/${campaignId}/adsets`,
+      {
+        params: {
+          access_token: userToken,
+          fields: 'id,name,status,daily_budget,lifetime_budget,optimization_goal,created_time,targeting'
+        }
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      adsets: response.data.data || []
+    });
+
+  } catch (error) {
+    console.error('Error fetching campaign adsets from Meta:', error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message
+    });
+  }
+};
+
+exports.getAdSetAds = async (req, res) => {
+  const userId = req.user.id;
+  const { adsetId } = req.params;
+
+  try {
+    const userAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook_user' }
+    });
+
+    if (!userAccount) {
+      return res.status(400).json({ success: false, error: 'Facebook connection not found.' });
+    }
+
+    const userToken = userAccount.accessToken;
+
+    const response = await axios.get(
+      `${META_GRAPH_BASE_URL}/${adsetId}/ads`,
+      {
+        params: {
+          access_token: userToken,
+          fields: 'id,name,status,creative,created_time'
+        }
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      ads: response.data.data || []
+    });
+
+  } catch (error) {
+    console.error('Error fetching adset ads from Meta:', error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message
+    });
+  }
+};
+
+exports.getRoiStats = async (req, res) => {
+  const userId = req.user.id;
+  const { adAccountId, period } = req.query;
+
+  if (!adAccountId) {
+    return res.status(400).json({ success: false, error: 'adAccountId is required' });
+  }
+
+  const datePreset = period || 'this_month';
+
+  try {
+    const userAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook_user' }
+    });
+
+    if (!userAccount) {
+      return res.status(400).json({ success: false, error: 'Facebook connection not found.' });
+    }
+
+    const userToken = userAccount.accessToken;
+    let cleanId = adAccountId.trim();
+    if (!cleanId.startsWith('act_')) {
+      cleanId = 'act_' + cleanId;
+    }
+
+    // 1. Fetch Ad Account currency
+    let currency = 'INR';
+    try {
+      const accountRes = await axios.get(
+        `${META_GRAPH_BASE_URL}/${cleanId}`,
+        {
+          params: {
+            fields: 'currency',
+            access_token: userToken
+          }
+        }
+      );
+      currency = accountRes.data.currency || 'INR';
+    } catch (e) {
+      console.warn('Could not fetch ad account currency for ROI:', e.message);
+    }
+
+    // 2. Fetch daily breakdown insights
+    const insightsRes = await axios.get(
+      `${META_GRAPH_BASE_URL}/${cleanId}/insights`,
+      {
+        params: {
+          date_preset: datePreset,
+          fields: 'spend,action_values',
+          time_increment: 1,
+          access_token: userToken
+        }
+      }
+    );
+
+    const rawData = insightsRes.data.data || [];
+    const rate = currency === 'USD' ? await getUsdToInrRate() : 1.0;
+
+    let totalSpent = 0;
+    let totalRevenue = 0;
+    const chartData = [];
+
+    rawData.forEach(day => {
+      let daySpend = parseFloat(day.spend || 0) * rate;
+      
+      let dayRevenue = 0;
+      if (day.action_values && Array.isArray(day.action_values)) {
+        const purchaseVal = day.action_values.find(v => v.action_type === 'purchase');
+        if (purchaseVal) {
+          dayRevenue = parseFloat(purchaseVal.value || 0) * rate;
+        }
+      }
+
+      totalSpent += daySpend;
+      totalRevenue += dayRevenue;
+
+      // Calculate daily ROI
+      const dailyRoi = daySpend > 0 ? parseFloat((dayRevenue / daySpend).toFixed(2)) : 0.0;
+      
+      // Parse date to readable format, e.g. "Aug 1"
+      let label = '';
+      if (day.date_start) {
+        const dateObj = new Date(day.date_start);
+        const options = { month: 'short', day: 'numeric' };
+        label = dateObj.toLocaleDateString('en-US', options);
+      }
+
+      chartData.push({
+        date: label,
+        roi: dailyRoi,
+        spend: parseFloat(daySpend.toFixed(2)),
+        revenue: parseFloat(dayRevenue.toFixed(2))
+      });
+    });
+
+    // Calculate final metrics
+    const roi = totalSpent > 0 ? parseFloat((totalRevenue / totalSpent).toFixed(2)) : 0.0;
+    const profit = totalRevenue - totalSpent;
+
+    return res.status(200).json({
+      success: true,
+      metrics: {
+        totalSpent: parseFloat(totalSpent.toFixed(2)),
+        totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+        roi: roi,
+        profit: parseFloat(profit.toFixed(2))
+      },
+      chartData: chartData
+    });
+
+  } catch (error) {
+    console.error('Error fetching ROI stats from Meta:', error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message
+    });
+  }
+};
+
+exports.syncAndListLeads = async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // 1. Retrieve linked Facebook page account
+    const pageAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook' }
+    });
+
+    // If no page connected, just return existing local leads
+    if (!pageAccount) {
+      const localLeads = await Lead.findAll({
+        where: { userId },
+        order: [['submittedAt', 'DESC']]
+      });
+      return res.status(200).json({ success: true, leads: localLeads });
+    }
+
+    const pageId = pageAccount.accountId;
+    const accessToken = pageAccount.accessToken;
+
+    // 2. Fetch all Leadgen forms for the connected page
+    let formsRes;
+    try {
+      formsRes = await axios.get(
+        `${META_GRAPH_BASE_URL}/${pageId}/leadgen_forms`,
+        {
+          params: {
+            fields: 'id,name,status',
+            access_token: accessToken
+          }
+        }
+      );
+    } catch (formErr) {
+      console.warn('Error querying page leadgen forms from Meta:', formErr.response?.data || formErr.message);
+      // Fail gracefully and serve local leads
+      const localLeads = await Lead.findAll({
+        where: { userId },
+        order: [['submittedAt', 'DESC']]
+      });
+      return res.status(200).json({ success: true, leads: localLeads });
+    }
+
+    const forms = formsRes.data?.data || [];
+    const allLeads = [];
+
+    // 3. For each form, query the list of leads
+    for (const form of forms) {
+      try {
+        const leadsRes = await axios.get(
+          `${META_GRAPH_BASE_URL}/${form.id}/leads`,
+          {
+            params: {
+              fields: 'id,created_time,field_data',
+              access_token: accessToken
+            }
+          }
+        );
+
+        const formLeads = leadsRes.data?.data || [];
+        formLeads.forEach(metaLead => {
+          let name = '';
+          let email = '';
+          let phone = '';
+
+          if (metaLead.field_data) {
+            metaLead.field_data.forEach(field => {
+              const fieldName = (field.name || '').toLowerCase();
+              const val = field.values && field.values.length > 0 ? field.values[0] : '';
+              if (fieldName.includes('name') || fieldName === 'full_name') {
+                name = val;
+              } else if (fieldName.includes('email')) {
+                email = val;
+              } else if (fieldName.includes('phone')) {
+                phone = val;
+              }
+            });
+          }
+
+          allLeads.push({
+            id: metaLead.id,
+            formId: form.id,
+            name: name || 'Unnamed Lead',
+            email: email || 'N/A',
+            phone: phone || 'N/A',
+            submittedAt: metaLead.created_time ? new Date(metaLead.created_time) : new Date()
+          });
+        });
+      } catch (err) {
+        console.warn(`Error querying leads for form ${form.id}:`, err.response?.data || err.message);
+      }
+    }
+
+    // 4. Sync leads with database
+    for (const lead of allLeads) {
+      try {
+        await Lead.findOrCreate({
+          where: { id: lead.id },
+          defaults: {
+            userId,
+            formId: lead.formId,
+            name: lead.name,
+            email: lead.email,
+            phone: lead.phone,
+            status: 'New',
+            submittedAt: lead.submittedAt
+          }
+        });
+      } catch (syncErr) {
+        console.error(`Failed to sync lead ${lead.id}:`, syncErr.message);
+      }
+    }
+
+    // 5. Fetch all leads locally for this user
+    const localLeads = await Lead.findAll({
+      where: { userId },
+      order: [['submittedAt', 'DESC']]
+    });
+
+    return res.status(200).json({
+      success: true,
+      leads: localLeads
+    });
+
+  } catch (error) {
+    console.error('Error syncing and listing leads:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+exports.updateLeadStatus = async (req, res) => {
+  const userId = req.user.id;
+  const { leadId, status } = req.body;
+
+  if (!leadId || !status) {
+    return res.status(400).json({ success: false, error: 'leadId and status are required' });
+  }
+
+  const validStatuses = ['New', 'Contacted', 'Converted'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ success: false, error: 'Invalid status value.' });
+  }
+
+  try {
+    const lead = await Lead.findOne({ where: { id: leadId, userId } });
+    if (!lead) {
+      return res.status(404).json({ success: false, error: 'Lead not found.' });
+    }
+
+    await lead.update({ status });
+    return res.status(200).json({
+      success: true,
+      message: 'Lead status updated successfully',
+      lead
+    });
+  } catch (error) {
+    console.error('Error updating lead status:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 };

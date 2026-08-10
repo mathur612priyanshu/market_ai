@@ -17,6 +17,8 @@ import 'screens/ai/create_campaign_screen.dart';
 import 'screens/ai/create_adset_screen.dart';
 import 'screens/ai/create_ad_screen.dart';
 import 'screens/ai/campaign_management_screen.dart';
+import 'screens/ai/campaign_adsets_screen.dart';
+import 'screens/ai/adset_ads_screen.dart';
 import 'screens/ai/ai_post_creator_screen.dart';
 import 'screens/ai/generated_post_screen.dart';
 import 'screens/ai/schedule_post_screen.dart';
@@ -88,6 +90,8 @@ class MarketAiApp extends StatelessWidget {
         AppRoutes.createAdSet: (_) => const CreateAdSetScreen(),
         AppRoutes.createAd: (_) => const CreateAdScreen(),
         AppRoutes.campaignManagement: (_) => const CampaignManagementScreen(),
+        AppRoutes.campaignAdSets: (_) => const CampaignAdSetsScreen(),
+        AppRoutes.adsetAds: (_) => const AdSetAdsScreen(),
         AppRoutes.aiPostCreator: (_) => const AiPostCreatorScreen(),
         AppRoutes.generatedPost: (_) => const GeneratedPostScreen(),
         AppRoutes.schedulePost: (_) => const SchedulePostScreen(),

@@ -306,4 +306,79 @@ class AdService {
     );
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> fetchAdSetsForCampaign({
+    required String token,
+    required String campaignId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/campaigns/$campaignId/adsets'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> fetchAdsForAdSet({
+    required String token,
+    required String adsetId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/adsets/$adsetId/ads'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> fetchRoiStats({
+    required String token,
+    required String adAccountId,
+    required String period,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/roi-stats?adAccountId=$adAccountId&period=$period'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> fetchLeads({
+    required String token,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/leads'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> updateLeadStatus({
+    required String token,
+    required String leadId,
+    required String status,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/ads/leads/status'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'leadId': leadId,
+        'status': status,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
 }

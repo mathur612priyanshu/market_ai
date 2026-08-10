@@ -1,5 +1,6 @@
 const axios = require('axios');
 const SocialAccount = require('../models/SocialAccount');
+const User = require('../models/User');
 
 // Endpoint: GET /api/auth/facebook
 // Initiates the OAuth redirect flow
@@ -31,6 +32,38 @@ exports.facebookCallback = async (req, res) => {
 
   if (!code) {
     return res.status(400).send('Error: Authorization code not provided by Facebook');
+  }
+
+  const parsedUserId = parseInt(userId);
+  if (isNaN(parsedUserId)) {
+    return res.status(400).send(`
+      <html>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background-color: #f7f9fc;">
+          <h2 style="color: #FF5A5F;">Invalid Session ID</h2>
+          <p>No valid user session was associated with this login. Please close this tab and retry.</p>
+        </body>
+      </html>
+    `);
+  }
+
+  try {
+    const userExists = await User.findByPk(parsedUserId);
+    if (!userExists) {
+      console.warn(`OAuth callback received invalid or non-existent userId: ${userId}`);
+      return res.status(400).send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background-color: #f7f9fc;">
+            <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+              <div style="font-size: 50px; color: #FF5A5F; margin-bottom: 15px;">✕</div>
+              <h2 style="color: #333; margin-bottom: 10px;">User Not Found</h2>
+              <p style="color: #666; font-size: 14px; line-height: 1.5;">The user session in the app is not valid or has expired. Please log out of the mobile application and log in again, then retry connecting your social accounts.</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+  } catch (dbErr) {
+    console.error('Error validating user exists:', dbErr.message);
   }
 
   const fbAppId = process.env.FB_APP_ID;
@@ -155,6 +188,37 @@ exports.facebookCallback = async (req, res) => {
     `);
 
   } catch (error) {
+    const errorMsg = error.response?.data?.error?.message || error.message || '';
+    const codeUsed = errorMsg.includes('authorization code has been used') || 
+                     errorMsg.includes('code has been used') || 
+                     errorMsg.includes('used');
+
+    if (codeUsed) {
+      try {
+        const parsedUserId = parseInt(userId);
+        const existingToken = await SocialAccount.findOne({
+          where: { userId: parsedUserId, platform: 'facebook_user' }
+        });
+        if (existingToken) {
+          console.log('Authorization code already exchanged in a previous request. Gracefully redirecting to success page.');
+          return res.status(200).send(`
+            <html>
+              <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background-color: #f7f9fc;">
+                <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                  <div style="font-size: 50px; color: #4CAF50; margin-bottom: 15px;">✓</div>
+                  <h2 style="color: #333; margin-bottom: 10px;">Connection Successful!</h2>
+                  <p style="color: #666; font-size: 14px; line-height: 1.5;">Your Facebook Pages and linked Instagram accounts have been connected to MarketAI.</p>
+                  <p style="color: #999; font-size: 12px; margin-top: 30px;">You can now close this browser tab and return to the app.</p>
+                </div>
+              </body>
+            </html>
+          `);
+        }
+      } catch (dbErr) {
+        console.error('Db lookup during codeUsed error handling failed:', dbErr.message);
+      }
+    }
+
     console.error('Error during Facebook OAuth Callback:', error.response ? error.response.data : error.message);
     return res.status(500).send(`
       <html>

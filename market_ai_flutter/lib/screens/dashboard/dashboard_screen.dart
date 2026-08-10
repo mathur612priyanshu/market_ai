@@ -140,45 +140,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    borderColor: AppColors.primary.withOpacity(0.4),
-                    child: InkWell(
-                      onTap: () => Navigator.pushNamed(context, AppRoutes.campaignManagement).then((_) => _loadStats()),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.lavender,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.campaign_outlined, color: AppColors.primary, size: 28),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Campaign Manager',
-                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppColors.text),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Monitor performance, pause, duplicate, or edit your active ad campaigns.',
-                                  style: TextStyle(fontSize: 10.5, color: AppColors.muted, fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   const Text('Quick Actions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 12),
                   GridView.count(
@@ -196,8 +158,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                       _QuickAction(
                         icon: Icons.campaign_outlined,
-                        label: 'Ad Run',
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.adSetup).then((_) => _loadStats()),
+                        label: 'Campaign\nManager',
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.campaignManagement).then((_) => _loadStats()),
                       ),
                       _QuickAction(
                         icon: Icons.people_outline_rounded,

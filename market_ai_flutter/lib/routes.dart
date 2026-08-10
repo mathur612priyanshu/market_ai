@@ -12,6 +12,8 @@ class AppRoutes {
   static const createAdSet = '/create-adset';
   static const createAd = '/create-ad';
   static const campaignManagement = '/campaign-management';
+  static const campaignAdSets = '/campaign-adsets';
+  static const adsetAds = '/adset-ads';
   static const aiPostCreator = '/ai-post-creator';
   static const generatedPost = '/generated-post';
   static const schedulePost = '/schedule-post';

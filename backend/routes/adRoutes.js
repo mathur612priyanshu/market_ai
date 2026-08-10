@@ -35,4 +35,15 @@ router.get('/search-geolocation', authMiddleware, adController.searchGeolocation
 // Route for fetching advertisable applications (Protected)
 router.get('/accounts/:adAccountId/apps', authMiddleware, adController.getAdvertisableApps);
 
+// Routes for nested campaign hierarchy (Protected)
+router.get('/campaigns/:campaignId/adsets', authMiddleware, adController.getCampaignAdSets);
+router.get('/adsets/:adsetId/ads', authMiddleware, adController.getAdSetAds);
+
+// Route for ROI stats (Protected)
+router.get('/roi-stats', authMiddleware, adController.getRoiStats);
+
+// Routes for Leads Manager (Protected)
+router.get('/leads', authMiddleware, adController.syncAndListLeads);
+router.post('/leads/status', authMiddleware, adController.updateLeadStatus);
+
 module.exports = router;

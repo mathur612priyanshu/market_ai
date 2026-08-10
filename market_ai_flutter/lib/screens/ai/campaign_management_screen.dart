@@ -613,113 +613,128 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
 
         final isActive = status.toUpperCase() == 'ACTIVE';
 
-        return AppCard(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.text),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isActive ? AppColors.success.withOpacity(0.12) : AppColors.muted.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        color: isActive ? AppColors.success : AppColors.muted,
+        return GestureDetector(
+          onTap: () {
+            Navigator.pushNamed(
+              context,
+              AppRoutes.campaignAdSets,
+              arguments: {
+                'campaignId': id,
+                'campaignName': name,
+                'objective': _objectiveLabel(c['objective']?.toString() ?? ''),
+                'adAccountId': selectedAdAccountId,
+                'advantageBudgetEnabled': dailyBudget != null,
+              },
+            );
+          },
+          child: AppCard(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.text),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Objective', style: TextStyle(fontSize: 10.5, color: AppColors.muted)),
-                      Text(objective, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text('Budget', style: TextStyle(fontSize: 10.5, color: AppColors.muted)),
-                      Text(
-                        dailyBudget != null ? '$dailyBudget/day' : (lifetimeBudget ?? 'N/A'),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isActive ? AppColors.success.withOpacity(0.12) : AppColors.muted.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              const Divider(height: 1),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  IconButton(
-                    tooltip: isActive ? 'Pause' : 'Resume',
-                    onPressed: () => _toggleStatus(id, status),
-                    icon: Icon(
-                      isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                      color: isActive ? Colors.orange : Colors.green,
+                      child: Text(
+                        status,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: isActive ? AppColors.success : AppColors.muted,
+                        ),
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Duplicate',
-                    onPressed: () => _duplicateCampaign(id),
-                    icon: const Icon(Icons.copy_rounded, color: AppColors.primary),
-                  ),
-                  IconButton(
-                    tooltip: 'Edit Name',
-                    onPressed: () => _editCampaignName(id, name),
-                    icon: const Icon(Icons.edit_outlined, color: AppColors.muted),
-                  ),
-                  IconButton(
-                    tooltip: 'View Insights',
-                    onPressed: () => _viewCampaignInsights(id, name),
-                    icon: const Icon(Icons.bar_chart_rounded, color: AppColors.primary),
-                  ),
-                  IconButton(
-                    tooltip: 'Create Ad Set',
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.createAdSet,
-                        arguments: {
-                          'campaignId': id,
-                          'adAccountId': selectedAdAccountId,
-                          'campaignName': name,
-                          'objective': _objectiveLabel(c['objective']?.toString() ?? ''),
-                          'advantageBudgetEnabled': dailyBudget != null,
-                        },
-                      );
-                    },
-                    icon: const Icon(Icons.add_box_outlined, color: Colors.blue),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Objective', style: TextStyle(fontSize: 10.5, color: AppColors.muted)),
+                        Text(objective, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('Budget', style: TextStyle(fontSize: 10.5, color: AppColors.muted)),
+                        Text(
+                          dailyBudget != null ? '$dailyBudget/day' : (lifetimeBudget ?? 'N/A'),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    IconButton(
+                      tooltip: isActive ? 'Pause' : 'Resume',
+                      onPressed: () => _toggleStatus(id, status),
+                      icon: Icon(
+                        isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                        color: isActive ? Colors.orange : Colors.green,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Duplicate',
+                      onPressed: () => _duplicateCampaign(id),
+                      icon: const Icon(Icons.copy_rounded, color: AppColors.primary),
+                    ),
+                    IconButton(
+                      tooltip: 'Edit Name',
+                      onPressed: () => _editCampaignName(id, name),
+                      icon: const Icon(Icons.edit_outlined, color: AppColors.muted),
+                    ),
+                    IconButton(
+                      tooltip: 'View Insights',
+                      onPressed: () => _viewCampaignInsights(id, name),
+                      icon: const Icon(Icons.bar_chart_rounded, color: AppColors.primary),
+                    ),
+                    IconButton(
+                      tooltip: 'Create Ad Set',
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.createAdSet,
+                          arguments: {
+                            'campaignId': id,
+                            'adAccountId': selectedAdAccountId,
+                            'campaignName': name,
+                            'objective': _objectiveLabel(c['objective']?.toString() ?? ''),
+                            'advantageBudgetEnabled': dailyBudget != null,
+                          },
+                        );
+                      },
+                      icon: const Icon(Icons.add_box_outlined, color: Colors.blue),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
