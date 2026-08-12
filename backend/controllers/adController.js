@@ -495,9 +495,21 @@ exports.createAdSetOnly = async (req, res) => {
   } catch (err) {
     console.error('Error creating adset:', err.response?.data || err.message);
     const metaError = buildMetaError(err);
+    
+    let pageId = null;
+    try {
+      const pageAccount = await SocialAccount.findOne({
+        where: { userId, platform: 'facebook' }
+      });
+      if (pageAccount) pageId = pageAccount.accountId;
+    } catch (dbErr) {
+      console.warn('Could not fetch page account for terms redirect:', dbErr.message);
+    }
+
     return res.status(400).json({
       success: false,
       error: `Meta Ad Set Error: ${metaError.userMessage || metaError.message}`,
+      pageId,
       metaError
     });
   }
@@ -969,6 +981,7 @@ exports.getDashboardStats = async (req, res) => {
       return res.status(200).json({
         success: true,
         isMock: true,
+        accountName: 'Demo Ad Account',
         metrics: getFallbackPayload()
       });
     }
@@ -978,21 +991,23 @@ exports.getDashboardStats = async (req, res) => {
       cleanId = 'act_' + cleanId;
     }
 
-    // Fetch Ad Account currency to convert if USD
+    // Fetch Ad Account name and currency
     let currency = 'INR';
+    let accountName = cleanId;
     try {
       const accountRes = await axios.get(
         `${META_GRAPH_BASE_URL}/${cleanId}`,
         {
           params: {
-            fields: 'currency',
+            fields: 'name,currency',
             access_token: userToken
           }
         }
       );
       currency = accountRes.data.currency || 'INR';
+      accountName = accountRes.data.name || cleanId;
     } catch (e) {
-      console.warn('Could not fetch dashboard ad account currency:', e.message);
+      console.warn('Could not fetch dashboard ad account details:', e.message);
     }
 
     try {
@@ -1000,7 +1015,7 @@ exports.getDashboardStats = async (req, res) => {
         `${META_GRAPH_BASE_URL}/${cleanId}/insights`,
         {
           params: {
-            date_preset: 'this_month',
+            date_preset: 'maximum',
             fields: 'spend,reach,clicks,impressions',
             access_token: userToken
           }
@@ -1013,6 +1028,7 @@ exports.getDashboardStats = async (req, res) => {
         return res.status(200).json({
           success: true,
           isMock: true,
+          accountName: accountName,
           metrics: getFallbackPayload()
         });
       }
@@ -1038,6 +1054,7 @@ exports.getDashboardStats = async (req, res) => {
       return res.status(200).json({
         success: true,
         isMock: false,
+        accountName,
         metrics: {
           totalLeads: leadsCount > 0 ? leadsCount.toString() : '0',
           leadsChange: '+14.2%',
@@ -1446,17 +1463,19 @@ exports.syncAndListLeads = async (req, res) => {
     // 3. For each form, query the list of leads
     for (const form of forms) {
       try {
-        const leadsRes = await axios.get(
-          `${META_GRAPH_BASE_URL}/${form.id}/leads`,
-          {
-            params: {
-              fields: 'id,created_time,field_data',
-              access_token: accessToken
-            }
+        let nextUrl = `${META_GRAPH_BASE_URL}/${form.id}/leads?fields=id,created_time,field_data&access_token=${accessToken}&limit=100`;
+        const formLeads = [];
+        while (nextUrl) {
+          try {
+            const leadsRes = await axios.get(nextUrl);
+            const data = leadsRes.data?.data || [];
+            formLeads.push(...data);
+            nextUrl = leadsRes.data?.paging?.next || null;
+          } catch (metaErr) {
+            console.warn(`Error querying leads pagination for form ${form.id}:`, metaErr.response?.data || metaErr.message);
+            nextUrl = null;
           }
-        );
-
-        const formLeads = leadsRes.data?.data || [];
+        }
         formLeads.forEach(metaLead => {
           let name = '';
           let email = '';
@@ -1561,5 +1580,118 @@ exports.updateLeadStatus = async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+};
+
+exports.getPageForms = async (req, res) => {
+  const userId = req.user.id;
+  const { pageId } = req.params;
+
+  try {
+    const pageAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook', accountId: pageId }
+    });
+
+    if (!pageAccount) {
+      return res.status(404).json({ success: false, error: 'Facebook Page not connected or invalid.' });
+    }
+
+    const response = await axios.get(
+      `${META_GRAPH_BASE_URL}/${pageId}/leadgen_forms`,
+      {
+        params: {
+          fields: 'id,name,status,created_time',
+          access_token: pageAccount.accessToken
+        }
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      forms: response.data?.data || []
+    });
+  } catch (error) {
+    console.error('Error fetching page forms:', error.response?.data || error.message);
+    return res.status(500).json({ success: false, error: error.response?.data?.error?.message || error.message });
+  }
+};
+
+exports.syncAndListFormLeads = async (req, res) => {
+  const userId = req.user.id;
+  const { formId } = req.params;
+
+  try {
+    const pageAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook' }
+    });
+
+    if (!pageAccount) {
+      const localLeads = await Lead.findAll({
+        where: { userId, formId },
+        order: [['submittedAt', 'DESC']]
+      });
+      return res.status(200).json({ success: true, leads: localLeads });
+    }
+
+    const accessToken = pageAccount.accessToken;
+
+    let formLeads = [];
+    let nextUrl = `${META_GRAPH_BASE_URL}/${formId}/leads?fields=id,created_time,field_data&access_token=${accessToken}&limit=100`;
+
+    while (nextUrl) {
+      try {
+        const leadsRes = await axios.get(nextUrl);
+        const data = leadsRes.data?.data || [];
+        formLeads.push(...data);
+        nextUrl = leadsRes.data?.paging?.next || null;
+      } catch (metaErr) {
+        console.warn(`Error querying Meta leads pagination for form ${formId}:`, metaErr.response?.data || metaErr.message);
+        nextUrl = null;
+      }
+    }
+
+    for (const metaLead of formLeads) {
+      let name = '';
+      let email = '';
+      let phone = '';
+
+      if (metaLead.field_data) {
+        metaLead.field_data.forEach(field => {
+          const fieldName = (field.name || '').toLowerCase();
+          const val = field.values && field.values.length > 0 ? field.values[0] : '';
+          if (fieldName.includes('name') || fieldName === 'full_name') {
+            name = val;
+          } else if (fieldName.includes('email')) {
+            email = val;
+          } else if (fieldName.includes('phone')) {
+            phone = val;
+          }
+        });
+      }
+
+      await Lead.upsert({
+        id: metaLead.id,
+        userId,
+        formId,
+        name: name || 'Unnamed Lead',
+        email: email || 'N/A',
+        phone: phone || 'N/A',
+        submittedAt: metaLead.created_time ? new Date(metaLead.created_time) : new Date(),
+        fieldData: metaLead.field_data || []
+      });
+    }
+
+    const leads = await Lead.findAll({
+      where: { userId, formId },
+      order: [['submittedAt', 'DESC']]
+    });
+
+    return res.status(200).json({
+      success: true,
+      leads
+    });
+  } catch (error) {
+    console.error('Error syncing form leads:', error.message);
+    return res.status(500).json({ success: false, error: error.message });
   }
 };

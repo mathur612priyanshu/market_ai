@@ -27,6 +27,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     'reachChange': '+8.7%'
   };
 
+  String _accountName = 'Loading...';
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +47,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (res['success'] == true && res['metrics'] != null && mounted) {
         setState(() {
           _stats = Map<String, dynamic>.from(res['metrics']);
+          _accountName = res['accountName']?.toString() ?? 'Demo Ad Account';
         });
       }
     } catch (e) {
@@ -81,7 +84,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         children: [
                           Text('Hello, $userName 👋', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 5),
-                          const Text("Here's your business overview", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          Text("Here's your business overview • $_accountName", style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
                         ],
                       ),
                     ),
@@ -119,23 +122,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         MetricCard(
                           label: 'Total Leads',
                           value: _stats['totalLeads']?.toString() ?? '0',
-                          change: _stats['leadsChange']?.toString() ?? '+0.0%',
+                          change: '',
                         ),
                         MetricCard(
                           label: 'Ad Spend',
                           value: _stats['adSpend']?.toString() ?? '₹0',
-                          change: _stats['spendChange']?.toString() ?? '+0.0%',
-                          positive: _stats['spendPositive'] == true,
+                          change: '',
                         ),
                         MetricCard(
                           label: 'ROI',
                           value: _stats['roi']?.toString() ?? '0.0x',
-                          change: _stats['roiChange']?.toString() ?? '+0.0%',
+                          change: '',
                         ),
                         MetricCard(
                           label: 'Reach',
                           value: _stats['reach']?.toString() ?? '0',
-                          change: _stats['reachChange']?.toString() ?? '+0.0%',
+                          change: '',
                         ),
                       ],
                     ),

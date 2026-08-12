@@ -45,5 +45,7 @@ router.get('/roi-stats', authMiddleware, adController.getRoiStats);
 // Routes for Leads Manager (Protected)
 router.get('/leads', authMiddleware, adController.syncAndListLeads);
 router.post('/leads/status', authMiddleware, adController.updateLeadStatus);
+router.get('/pages/:pageId/forms', authMiddleware, adController.getPageForms);
+router.get('/forms/:formId/leads', authMiddleware, adController.syncAndListFormLeads);
 
 module.exports = router;

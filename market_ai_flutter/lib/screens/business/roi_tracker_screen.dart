@@ -25,22 +25,57 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
   double profit = 0.0;
   List<dynamic> chartPoints = [];
 
+  List<dynamic> adAccounts = [];
+  bool isLoadingAccounts = true;
+
   @override
   void initState() {
     super.initState();
-    _loadAdAccountAndFetchStats();
+    _loadAccountsAndStats();
   }
 
-  Future<void> _loadAdAccountAndFetchStats() async {
-    final prefs = await SharedPreferences.getInstance();
-    adAccountId = prefs.getString('ad_account_id');
-    if (adAccountId == null || adAccountId!.isEmpty || adAccountId == 'act_') {
-      setState(() {
-        isLoading = false;
-      });
-      return;
+  Future<void> _loadAccountsAndStats() async {
+    setState(() {
+      isLoadingAccounts = true;
+    });
+    try {
+      final token = ref.read(authProvider).token;
+      if (token == null) return;
+      
+      final res = await AdService.fetchUserAdAccounts(token: token);
+      if (res['success'] == true && mounted) {
+        final list = res['accounts'] as List<dynamic>? ?? [];
+        
+        final prefs = await SharedPreferences.getInstance();
+        var savedId = prefs.getString('ad_account_id');
+        
+        if ((savedId == null || savedId.isEmpty || savedId == 'act_') && list.isNotEmpty) {
+          savedId = list.first['id']?.toString() ?? '';
+          if (savedId.isNotEmpty) {
+            await prefs.setString('ad_account_id', savedId);
+          }
+        }
+        
+        setState(() {
+          adAccounts = list;
+          adAccountId = savedId;
+          isLoadingAccounts = false;
+        });
+        
+        if (adAccountId != null && adAccountId!.isNotEmpty && adAccountId != 'act_') {
+          _fetchRoiData();
+        } else {
+          setState(() {
+            isLoading = false;
+          });
+        }
+      } else {
+        setState(() => isLoadingAccounts = false);
+      }
+    } catch (e) {
+      debugPrint('Error loading ad accounts: $e');
+      setState(() => isLoadingAccounts = false);
     }
-    _fetchRoiData();
   }
 
   Future<void> _fetchRoiData() async {
@@ -82,9 +117,6 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Map dropdown options
-    final dropdownValue = period;
-
     final doubleValues = chartPoints
         .map<double>((p) => double.tryParse(p['roi']?.toString() ?? '0') ?? 0.0)
         .toList();
@@ -104,6 +136,81 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
               padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
               child: ScreenHeader(title: 'ROI Tracker', subtitle: 'Track your return on investment.'),
             ),
+            const SizedBox(height: 12),
+            
+            // Dropdown Selectors Row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: period,
+                      items: const [
+                        DropdownMenuItem(value: 'this_month', child: Text('This Month')),
+                        DropdownMenuItem(value: 'last_month', child: Text('Last Month')),
+                        DropdownMenuItem(value: 'this_quarter', child: Text('This Quarter')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => period = value);
+                          _fetchRoiData();
+                        }
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Timeframe',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (isLoadingAccounts)
+                    const Expanded(child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
+                  else if (adAccounts.isNotEmpty)
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: adAccountId,
+                        items: adAccounts.map<DropdownMenuItem<String>>((acc) {
+                          return DropdownMenuItem<String>(
+                            value: acc['id']?.toString(),
+                            child: Text(
+                              acc['name']?.toString() ?? 'Unnamed Account',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) async {
+                          if (value != null) {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setString('ad_account_id', value);
+                            setState(() {
+                              adAccountId = value;
+                            });
+                            _fetchRoiData();
+                          }
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Ad Account',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    )
+                  else
+                    const Expanded(
+                      child: Text(
+                        'No Ad Accounts connected',
+                        style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            
             Expanded(
               child: adAccountId == null || adAccountId == 'act_'
                   ? _buildMissingAccountState()
@@ -114,31 +221,10 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
                           color: AppColors.primary,
                           child: SingleChildScrollView(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(18, 18, 18, 25),
+                            padding: const EdgeInsets.fromLTRB(18, 8, 18, 25),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                SizedBox(
-                                  width: 160,
-                                  child: DropdownButtonFormField<String>(
-                                    value: dropdownValue,
-                                    items: const [
-                                      DropdownMenuItem(value: 'this_month', child: Text('This Month')),
-                                      DropdownMenuItem(value: 'last_month', child: Text('Last Month')),
-                                      DropdownMenuItem(value: 'this_quarter', child: Text('This Quarter')),
-                                    ],
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        setState(() => period = value);
-                                        _fetchRoiData();
-                                      }
-                                    },
-                                    decoration: const InputDecoration(
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
                                 GridView.count(
                                   shrinkWrap: true,
                                   physics: const NeverScrollableScrollPhysics(),
@@ -236,14 +322,14 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Please go to the Campaign Manager screen first and select a valid Ad Account to load ROI reports.',
+              'Please select a valid Ad Account from the dropdown above to load ROI reports.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.muted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.campaignManagement).then((_) => _loadAdAccountAndFetchStats());
+                Navigator.pushNamed(context, AppRoutes.campaignManagement).then((_) => _loadAccountsAndStats());
               },
               child: const Text('Go to Campaign Manager'),
             ),
@@ -289,7 +375,9 @@ class _RoiChartPainter extends CustomPainter {
 
     final path = Path();
     for (var i = 0; i < values.length; i++) {
-      final x = chartRect.left + chartRect.width * i / (values.length - 1);
+      final x = values.length == 1
+          ? chartRect.left + chartRect.width / 2
+          : chartRect.left + chartRect.width * i / (values.length - 1);
       final normalized = (values[i] - minValue) / divisor;
       final y = chartRect.bottom - chartRect.height * normalized;
       if (i == 0) {
@@ -301,7 +389,6 @@ class _RoiChartPainter extends CustomPainter {
     }
     canvas.drawPath(path, linePaint);
 
-    // Limit label prints to keep spacing clean
     final labelStep = (labels.length / 4).ceil();
     for (var i = 0; i < labels.length; i += labelStep) {
       if (i >= labels.length) break;
@@ -309,7 +396,9 @@ class _RoiChartPainter extends CustomPainter {
         text: TextSpan(text: labels[i], style: const TextStyle(color: AppColors.muted, fontSize: 9)),
         textDirection: TextDirection.ltr,
       )..layout();
-      final x = chartRect.left + chartRect.width * i / (labels.length - 1) - painter.width / 2;
+      final x = values.length == 1
+          ? chartRect.left + chartRect.width / 2 - painter.width / 2
+          : chartRect.left + chartRect.width * i / (labels.length - 1) - painter.width / 2;
       painter.paint(canvas, Offset(x, chartRect.bottom + 11));
     }
   }

@@ -39,6 +39,10 @@ const Lead = sequelize.define('Lead', {
   submittedAt: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  fieldData: {
+    type: DataTypes.JSON,
+    allowNull: true
   }
 }, {
   timestamps: true

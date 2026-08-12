@@ -381,4 +381,32 @@ class AdService {
     );
     return jsonDecode(response.body);
   }
+
+  static Future<Map<String, dynamic>> fetchPageForms({
+    required String token,
+    required String pageId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/pages/$pageId/forms'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> fetchFormLeads({
+    required String token,
+    required String formId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ads/forms/$formId/leads'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return jsonDecode(response.body);
+  }
 }

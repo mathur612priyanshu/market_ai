@@ -596,7 +596,7 @@ class _CampaignManagementScreenState extends ConsumerState<CampaignManagementScr
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 90),
       itemCount: campaigns.length,
       itemBuilder: (context, index) {
         final c = campaigns[index];

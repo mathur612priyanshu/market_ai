@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/ad_service.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -16,21 +17,91 @@ class LeadsManagerScreen extends ConsumerStatefulWidget {
 class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
   int tab = 0;
   List<dynamic> leads = [];
-  bool isLoading = true;
+  bool isLoading = false;
+
+  List<dynamic> facebookPages = [];
+  List<dynamic> forms = [];
+  String? selectedPageId;
+  String? selectedFormId;
+  bool isLoadingPages = true;
+  bool isLoadingForms = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchLeads();
+    _fetchPages();
   }
 
-  Future<void> _fetchLeads() async {
+  Future<void> _fetchPages() async {
+    setState(() {
+      isLoadingPages = true;
+      facebookPages = [];
+    });
+    try {
+      final token = ref.read(authProvider).token;
+      if (token == null) return;
+      
+      final res = await AuthService.fetchSocialStatus(token);
+      if (res['success'] == true && mounted) {
+        final accounts = res['accounts'] as List<dynamic>? ?? [];
+        final fbPages = accounts.where((acc) => acc['platform'] == 'facebook').toList();
+        setState(() {
+          facebookPages = fbPages;
+          isLoadingPages = false;
+          if (fbPages.isNotEmpty) {
+            selectedPageId = fbPages.first['accountId']?.toString();
+          }
+        });
+        if (selectedPageId != null) {
+          _fetchForms(selectedPageId!);
+        }
+      } else {
+        setState(() => isLoadingPages = false);
+      }
+    } catch (e) {
+      setState(() => isLoadingPages = false);
+    }
+  }
+
+  Future<void> _fetchForms(String pageId) async {
+    setState(() {
+      isLoadingForms = true;
+      forms = [];
+      selectedFormId = null;
+      leads = [];
+    });
+    try {
+      final token = ref.read(authProvider).token;
+      if (token == null) return;
+      
+      final res = await AdService.fetchPageForms(token: token, pageId: pageId);
+      if (res['success'] == true && mounted) {
+        final formsList = res['forms'] as List<dynamic>? ?? [];
+        setState(() {
+          forms = formsList;
+          isLoadingForms = false;
+          if (formsList.isNotEmpty) {
+            selectedFormId = formsList.first['id']?.toString();
+          }
+        });
+        if (selectedFormId != null) {
+          _fetchLeads(selectedFormId!);
+        }
+      } else {
+        setState(() => isLoadingForms = false);
+      }
+    } catch (e) {
+      setState(() => isLoadingForms = false);
+    }
+  }
+
+  Future<void> _fetchLeads(String formId) async {
     setState(() => isLoading = true);
     try {
       final token = ref.read(authProvider).token;
       if (token == null) return;
 
-      final res = await AdService.fetchLeads(token: token);
+      final res = await AdService.fetchFormLeads(token: token, formId: formId);
       if (res['success'] == true && mounted) {
         setState(() {
           leads = res['leads'] ?? [];
@@ -71,12 +142,16 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
 
       if (res['success'] != true && mounted) {
         showAppSnackBar(context, res['error'] ?? 'Failed to update status.');
-        _fetchLeads(); // Rollback
+        if (selectedFormId != null) {
+          _fetchLeads(selectedFormId!); // Rollback
+        }
       }
     } catch (e) {
       if (mounted) {
         showAppSnackBar(context, 'Error updating status: $e');
-        _fetchLeads();
+        if (selectedFormId != null) {
+          _fetchLeads(selectedFormId!);
+        }
       }
     }
   }
@@ -135,6 +210,33 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
     final email = lead['email']?.toString() ?? 'N/A';
     final phone = lead['phone']?.toString() ?? 'N/A';
     String statusValue = lead['status']?.toString() ?? 'New';
+    final fieldData = lead['fieldData'] as List<dynamic>? ?? [];
+
+    final customQuestions = <Map<String, String>>[];
+    for (final field in fieldData) {
+      final fieldName = field['name']?.toString() ?? '';
+      final valuesList = field['values'] as List<dynamic>? ?? [];
+      final val = valuesList.isNotEmpty ? valuesList.first.toString() : '';
+
+      final lowerName = fieldName.toLowerCase();
+      if (lowerName.contains('name') || lowerName.contains('email') || lowerName.contains('phone')) {
+        continue;
+      }
+
+      if (fieldName.isNotEmpty && val.isNotEmpty) {
+        var humanName = fieldName
+            .replaceAll(RegExp(r'^[\d\.\s_]+'), '')
+            .replaceAll('_', ' ')
+            .trim();
+        if (humanName.isNotEmpty) {
+          humanName = humanName[0].toUpperCase() + humanName.substring(1);
+          customQuestions.add({
+            'label': humanName,
+            'value': val,
+          });
+        }
+      }
+    }
 
     showModalBottomSheet<void>(
       context: context,
@@ -165,7 +267,6 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
                 ],
                 const SizedBox(height: 16),
                 
-                // Status selection row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -217,6 +318,49 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
                       ),
                   ],
                 ),
+                if (customQuestions.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Custom Survey Responses',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: AppColors.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: customQuestions.map((q) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 4,
+                                child: Text(
+                                  '${q['label']}:',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5, color: Colors.black87),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 5,
+                                child: Text(
+                                  q['value'] ?? '',
+                                  style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )).toList(),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -244,12 +388,110 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-                    onPressed: _fetchLeads,
+                    onPressed: () {
+                      if (selectedFormId != null) {
+                        _fetchLeads(selectedFormId!);
+                      } else {
+                        _fetchPages();
+                      }
+                    },
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            
+            // Dropdown Selectors Card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  if (isLoadingPages)
+                    const Center(child: LinearProgressIndicator(color: AppColors.primary))
+                  else if (facebookPages.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.shade100),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.error_outline_rounded, color: Colors.red),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'No connected Facebook Pages found. Please connect page in Social Connect.',
+                              style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    DropdownButtonFormField<String>(
+                      value: selectedPageId,
+                      decoration: const InputDecoration(
+                        labelText: 'Facebook Page',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: facebookPages.map((page) {
+                        return DropdownMenuItem<String>(
+                          value: page['accountId']?.toString(),
+                          child: Text(page['accountName']?.toString() ?? 'Unnamed Page'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            selectedPageId = val;
+                          });
+                          _fetchForms(val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (isLoadingForms)
+                      const Center(child: LinearProgressIndicator(color: AppColors.primary))
+                    else if (forms.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          'No active Leadgen Forms found for this page.',
+                          style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+                        ),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        value: selectedFormId,
+                        decoration: const InputDecoration(
+                          labelText: 'Lead Form',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: forms.map((form) {
+                          return DropdownMenuItem<String>(
+                            value: form['id']?.toString(),
+                            child: Text(form['name']?.toString() ?? 'Unnamed Form'),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              selectedFormId = val;
+                            });
+                            _fetchLeads(val);
+                          }
+                        },
+                      ),
+                  ],
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
+            
             SizedBox(
               height: 40,
               child: ListView.separated(
@@ -280,7 +522,7 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
                   : filtered.isEmpty
                       ? _buildEmptyState()
                       : RefreshIndicator(
-                          onRefresh: _fetchLeads,
+                          onRefresh: () => selectedFormId != null ? _fetchLeads(selectedFormId!) : Future.value(),
                           color: AppColors.primary,
                           child: ListView.separated(
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
@@ -347,10 +589,12 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.text),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Ensure a Facebook Page is connected in Social Connect, and active Lead Generation forms are setup on your Page.',
+            Text(
+              selectedFormId == null 
+                ? 'Please select a Facebook Page and Lead Form to view contacts.'
+                : 'No contacts submitted through this lead generation form yet.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: AppColors.muted),
+              style: const TextStyle(fontSize: 13, color: AppColors.muted),
             ),
           ],
         ),

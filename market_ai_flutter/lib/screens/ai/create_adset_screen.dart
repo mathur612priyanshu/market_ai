@@ -5,6 +5,7 @@ import '../../services/ad_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../routes.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CreateAdSetScreen extends ConsumerStatefulWidget {
   const CreateAdSetScreen({super.key});
@@ -299,7 +300,16 @@ class _CreateAdSetScreenState extends ConsumerState<CreateAdSetScreen> {
         );
       } else {
         if (mounted) {
-          showAppSnackBar(context, res['error'] ?? 'Failed to create Ad Set');
+          final errorText = res['error'] ?? 'Failed to create Ad Set';
+          final pageId = res['pageId']?.toString();
+          
+          if (errorText.toLowerCase().contains('terms of service') || 
+              errorText.toLowerCase().contains('lead generation terms') || 
+              errorText.toLowerCase().contains('accept facebook\'s lead generation')) {
+            _showTermsDialog(pageId);
+          } else {
+            showAppSnackBar(context, errorText);
+          }
         }
       }
     } catch (e) {
@@ -311,6 +321,76 @@ class _CreateAdSetScreenState extends ConsumerState<CreateAdSetScreen> {
         setState(() => isSubmitting = false);
       }
     }
+  }
+
+  void _showTermsDialog(String? pageId) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 8),
+            Text('Action Required', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Meta requires you to accept their Lead Generation Terms of Service for your Facebook Page before you can create Lead Ads.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.lavender,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primary),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Tapping the button below will open Facebook directly to pre-select your page for quick agreement.',
+                      style: TextStyle(fontSize: 11.5, color: AppColors.muted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.muted, fontWeight: FontWeight.bold)),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final String pageQuery = pageId != null ? '?page_id=$pageId' : '';
+              final url = 'https://www.facebook.com/ads/leadgen/tos$pageQuery';
+              final uri = Uri.parse(url);
+              try {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              } catch (e) {
+                if (mounted) {
+                  showAppSnackBar(context, 'Could not open browser: $e');
+                }
+              }
+            },
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('Open & Accept Terms', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
