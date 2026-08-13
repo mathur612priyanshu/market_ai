@@ -1461,10 +1461,13 @@ exports.syncAndListLeads = async (req, res) => {
     const forms = formsRes.data?.data || [];
     const allLeads = [];
 
+    const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);
+    const filterParam = encodeURIComponent(JSON.stringify([{ field: 'time_created', operator: 'GREATER_THAN', value: ninetyDaysAgo }]));
+
     // 3. For each form, query the list of leads
     for (const form of forms) {
       try {
-        let nextUrl = `${META_GRAPH_BASE_URL}/${form.id}/leads?fields=id,created_time,field_data&access_token=${accessToken}&limit=100`;
+        let nextUrl = `${META_GRAPH_BASE_URL}/${form.id}/leads?fields=id,created_time,field_data&filtering=${filterParam}&access_token=${accessToken}&limit=100`;
         const formLeads = [];
         while (nextUrl) {
           try {
@@ -1635,9 +1638,11 @@ exports.syncAndListFormLeads = async (req, res) => {
     }
 
     const accessToken = pageAccount.accessToken;
+    const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);
+    const filterParam = encodeURIComponent(JSON.stringify([{ field: 'time_created', operator: 'GREATER_THAN', value: ninetyDaysAgo }]));
 
     let formLeads = [];
-    let nextUrl = `${META_GRAPH_BASE_URL}/${formId}/leads?fields=id,created_time,field_data&access_token=${accessToken}&limit=100`;
+    let nextUrl = `${META_GRAPH_BASE_URL}/${formId}/leads?fields=id,created_time,field_data&filtering=${filterParam}&access_token=${accessToken}&limit=100`;
 
     while (nextUrl) {
       try {
