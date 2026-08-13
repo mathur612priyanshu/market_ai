@@ -1017,7 +1017,7 @@ exports.getDashboardStats = async (req, res) => {
         {
           params: {
             date_preset: 'maximum',
-            fields: 'spend,reach,clicks,impressions',
+            fields: 'spend,reach,clicks,impressions,actions',
             access_token: userToken
           }
         }
@@ -1050,17 +1050,23 @@ exports.getDashboardStats = async (req, res) => {
       const mockConversionValue = spend * (3.2 + Math.random());
       const roiRatio = spend > 0 ? (mockConversionValue / spend).toFixed(1) : '0.0';
 
-      const leadsCount = Math.max(Math.floor(clicks * 0.08), Math.floor(spend / 150));
+      let leadsCount = 0;
+      if (raw.actions && Array.isArray(raw.actions)) {
+        const leadAction = raw.actions.find(a => a.action_type === 'lead' || a.action_type === 'onsite_conversion.lead_grouped');
+        if (leadAction) {
+          leadsCount = parseInt(leadAction.value || 0);
+        }
+      }
 
       return res.status(200).json({
         success: true,
         isMock: false,
         accountName,
         metrics: {
-          totalLeads: leadsCount > 0 ? leadsCount.toString() : '0',
-          leadsChange: '+14.2%',
+          totalLeads: leadsCount.toString(),
+          leadsChange: '',
           adSpend: displaySpend,
-          spendChange: '-3.8%',
+          spendChange: '',
           spendPositive: false,
           roi: `${roiRatio}x`,
           roiChange: '+15.4%',
