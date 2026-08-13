@@ -242,13 +242,15 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
       context: context,
       showDragHandle: true,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setModalState) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 6, 20, 25),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 25),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 CircleAvatar(
                   radius: 34,
                   backgroundColor: AppColors.lavender,
@@ -366,6 +368,7 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 

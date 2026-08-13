@@ -1489,11 +1489,19 @@ exports.syncAndListLeads = async (req, res) => {
             metaLead.field_data.forEach(field => {
               const fieldName = (field.name || '').toLowerCase();
               const val = field.values && field.values.length > 0 ? field.values[0] : '';
-              if (fieldName.includes('name') || fieldName === 'full_name') {
-                name = val;
-              } else if (fieldName.includes('email')) {
+              if (fieldName === 'full_name' || fieldName === 'name' || fieldName === 'first_name' || fieldName === 'last_name') {
+                if (!name) name = val;
+              } else if (fieldName === 'email' || fieldName === 'email_address') {
                 email = val;
-              } else if (fieldName.includes('phone')) {
+              } else if (fieldName === 'phone_number' || fieldName === 'phone' || fieldName === 'phone_number_mobile' || fieldName === 'mobile_number') {
+                phone = val;
+              }
+            });
+            // Fallback checks for phone/whatsapp
+            metaLead.field_data.forEach(field => {
+              const fieldName = (field.name || '').toLowerCase();
+              const val = field.values && field.values.length > 0 ? field.values[0] : '';
+              if (!phone && (fieldName.includes('phone') || fieldName.includes('whatsapp') || fieldName.includes('mobile')) && !fieldName.includes('google') && !fieldName.includes('profile')) {
                 phone = val;
               }
             });
@@ -1665,11 +1673,19 @@ exports.syncAndListFormLeads = async (req, res) => {
         metaLead.field_data.forEach(field => {
           const fieldName = (field.name || '').toLowerCase();
           const val = field.values && field.values.length > 0 ? field.values[0] : '';
-          if (fieldName.includes('name') || fieldName === 'full_name') {
-            name = val;
-          } else if (fieldName.includes('email')) {
+          if (fieldName === 'full_name' || fieldName === 'name' || fieldName === 'first_name' || fieldName === 'last_name') {
+            if (!name) name = val;
+          } else if (fieldName === 'email' || fieldName === 'email_address') {
             email = val;
-          } else if (fieldName.includes('phone')) {
+          } else if (fieldName === 'phone_number' || fieldName === 'phone' || fieldName === 'phone_number_mobile' || fieldName === 'mobile_number') {
+            phone = val;
+          }
+        });
+        // Fallback checks for phone/whatsapp
+        metaLead.field_data.forEach(field => {
+          const fieldName = (field.name || '').toLowerCase();
+          const val = field.values && field.values.length > 0 ? field.values[0] : '';
+          if (!phone && (fieldName.includes('phone') || fieldName.includes('whatsapp') || fieldName.includes('mobile')) && !fieldName.includes('google') && !fieldName.includes('profile')) {
             phone = val;
           }
         });

@@ -28,6 +28,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   };
 
   String _accountName = 'Loading...';
+  List<dynamic> adAccounts = [];
+  String? _selectedAdAccountId;
 
   @override
   void initState() {
@@ -40,9 +42,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (token == null) return;
 
     try {
+      final accountsRes = await AdService.fetchUserAdAccounts(token: token);
+      List<dynamic> list = [];
+      if (accountsRes['success'] == true) {
+        list = accountsRes['accounts'] as List<dynamic>? ?? [];
+      }
+
       final prefs = await SharedPreferences.getInstance();
-      final adAccountId = prefs.getString('ad_account_id') ?? 'act_123456789';
+      var savedId = prefs.getString('ad_account_id');
       
+      if ((savedId == null || savedId.isEmpty || savedId == 'act_') && list.isNotEmpty) {
+        savedId = list.first['id']?.toString() ?? '';
+        if (savedId.isNotEmpty) {
+          await prefs.setString('ad_account_id', savedId);
+        }
+      }
+
+      setState(() {
+        adAccounts = list;
+        _selectedAdAccountId = savedId;
+      });
+
+      final activeId = _selectedAdAccountId ?? 'act_123456789';
+      _fetchDashboardStats(activeId);
+    } catch (e) {
+      debugPrint('Error loading dashboard stats: $e');
+    }
+  }
+
+  Future<void> _fetchDashboardStats(String adAccountId) async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    try {
       final res = await AdService.fetchDashboardStats(token: token, adAccountId: adAccountId);
       if (res['success'] == true && res['metrics'] != null && mounted) {
         setState(() {
@@ -51,7 +82,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading dashboard stats: $e');
+      debugPrint('Error fetching stats: $e');
     }
   }
 
@@ -84,10 +115,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         children: [
                           Text('Hello, $userName 👋', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 5),
-                          Text("Here's your business overview • $_accountName", style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                          if (adAccounts.isEmpty)
+                            Text("Here's your business overview • $_accountName", style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500))
+                          else ...[
+                            const Text("Here's your business overview", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 10),
+                            Theme(
+                              data: Theme.of(context).copyWith(
+                                canvasColor: AppColors.primary,
+                              ),
+                              child: Container(
+                                height: 38,
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.white24),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: _selectedAdAccountId,
+                                    isExpanded: true,
+                                    dropdownColor: AppColors.primary,
+                                    icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.white),
+                                    style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold),
+                                    items: adAccounts.map<DropdownMenuItem<String>>((acc) {
+                                      return DropdownMenuItem<String>(
+                                        value: acc['id']?.toString(),
+                                        child: Text(
+                                          acc['name']?.toString() ?? 'Unnamed Account',
+                                          style: const TextStyle(color: Colors.white),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (value) async {
+                                      if (value != null) {
+                                        final prefs = await SharedPreferences.getInstance();
+                                        await prefs.setString('ad_account_id', value);
+                                        setState(() {
+                                          _selectedAdAccountId = value;
+                                        });
+                                        _fetchDashboardStats(value);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
                     InkWell(
                       onTap: () => Navigator.pushNamed(context, AppRoutes.settings),
                       child: Container(
@@ -171,7 +251,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _QuickAction(
                         icon: Icons.show_chart_rounded,
                         label: 'ROI\nTracker',
-                        onTap: () => Navigator.pushNamed(context, AppRoutes.roiTracker),
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.roiTracker).then((_) => _loadStats()),
                       ),
                       _QuickAction(
                         icon: Icons.post_add_outlined,
