@@ -903,6 +903,7 @@ exports.getCampaignInsights = async (req, res) => {
       `${META_GRAPH_BASE_URL}/${campaignId}/insights`,
       {
         params: {
+          date_preset: 'maximum',
           fields: 'impressions,clicks,spend,reach',
           access_token: userAccount.accessToken
         }
