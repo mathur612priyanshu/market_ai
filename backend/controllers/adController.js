@@ -435,7 +435,10 @@ exports.createAdSetOnly = async (req, res) => {
     const targetSpec = {
       geo_locations: geoLocations,
       age_min: parseInt(ageMin, 10),
-      age_max: parseInt(ageMax, 10)
+      age_max: parseInt(ageMax, 10),
+      targeting_automation: {
+        advantage_audience: 0
+      }
     };
 
     if (!Number.isInteger(targetSpec.age_min) || !Number.isInteger(targetSpec.age_max) ||
