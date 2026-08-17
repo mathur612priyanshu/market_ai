@@ -14,6 +14,7 @@ const authRoutes = require('./routes/authRoutes');
 const postRoutes = require('./routes/postRoutes');
 const competitorRoutes = require('./routes/competitorRoutes');
 const adRoutes = require('./routes/adRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 
 // Middleware
 app.use(cors());
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/competitor', competitorRoutes);
 app.use('/api/ads', adRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Standard Status Endpoint
 app.get('/api/status', (req, res) => {
@@ -51,8 +53,8 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
     
-    // Sync models (automatically adding new columns/updating tables to match schema)
-    await sequelize.sync({ alter: true }); 
+    // Sync models
+    await sequelize.sync(); 
     console.log('Database models synchronized.');
     
     // Start background scheduled posts publisher

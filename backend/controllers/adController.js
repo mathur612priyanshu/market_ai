@@ -1661,6 +1661,7 @@ exports.syncAndListFormLeads = async (req, res) => {
     let formLeads = [];
     let nextUrl = `${META_GRAPH_BASE_URL}/${formId}/leads?fields=id,created_time,field_data&filtering=${filterParam}&access_token=${accessToken}&limit=100`;
 
+    let syncWarning = null;
     while (nextUrl) {
       try {
         const leadsRes = await axios.get(nextUrl);
@@ -1668,7 +1669,13 @@ exports.syncAndListFormLeads = async (req, res) => {
         formLeads.push(...data);
         nextUrl = leadsRes.data?.paging?.next || null;
       } catch (metaErr) {
+        const metaErrorObj = metaErr.response?.data?.error;
         console.warn(`Error querying Meta leads pagination for form ${formId}:`, metaErr.response?.data || metaErr.message);
+        if (metaErrorObj && (metaErrorObj.code === 10 || metaErrorObj.message.includes('privileges'))) {
+          syncWarning = 'Meta returned insufficient privileges error. Please ensure Leads Access is granted for this Facebook Page in Business Suite Integrations settings.';
+        } else {
+          syncWarning = metaErrorObj?.message || metaErr.message;
+        }
         nextUrl = null;
       }
     }
@@ -1719,6 +1726,7 @@ exports.syncAndListFormLeads = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      syncWarning,
       leads
     });
   } catch (error) {

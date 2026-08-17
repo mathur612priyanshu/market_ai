@@ -275,19 +275,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
                   _RecentReport(
                     icon: Icons.analytics_outlined,
                     title: 'Competitor Analysis',
                     date: 'May 24, 2024',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.reportDetails),
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      AppRoutes.reportDetails,
+                      arguments: {
+                        'id': 'competitor',
+                        'title': 'Competitor Analysis Report',
+                        'iconName': 'analytics_outlined',
+                      },
+                    ),
                   ),
                   const SizedBox(height: 8),
                   _RecentReport(
                     icon: Icons.campaign_outlined,
                     title: 'Ad Performance Report',
                     date: 'May 23, 2024',
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.reportDetails),
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      AppRoutes.reportDetails,
+                      arguments: {
+                        'id': 'ads',
+                        'title': 'Ad Performance Report',
+                        'iconName': 'campaign_outlined',
+                      },
+                    ),
                   ),
                 ]),
               ),

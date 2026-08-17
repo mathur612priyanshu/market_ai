@@ -18,6 +18,7 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
   int tab = 0;
   List<dynamic> leads = [];
   bool isLoading = false;
+  String? syncWarning;
 
   List<dynamic> facebookPages = [];
   List<dynamic> forms = [];
@@ -96,7 +97,10 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
   }
 
   Future<void> _fetchLeads(String formId) async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      syncWarning = null;
+    });
     try {
       final token = ref.read(authProvider).token;
       if (token == null) return;
@@ -105,6 +109,7 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
       if (res['success'] == true && mounted) {
         setState(() {
           leads = res['leads'] ?? [];
+          syncWarning = res['syncWarning']?.toString();
           isLoading = false;
         });
       } else {
@@ -493,7 +498,32 @@ class _LeadsManagerScreenState extends ConsumerState<LeadsManagerScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            if (syncWarning != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          syncWarning!,
+                          style: TextStyle(color: Colors.amber.shade900, fontSize: 11.5, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             
             SizedBox(
               height: 40,
