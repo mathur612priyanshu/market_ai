@@ -18,8 +18,11 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   Map<String, dynamic>? _reportData;
   bool _isLoading = true;
   String _errorMsg = '';
-  String _accountName = 'Loading...';
   String? _adAccountId;
+  List<dynamic> _socialAccounts = [];
+  String? _socialAccountId;
+  String _socialPeriod = '30';
+  List<dynamic> _adAccounts = [];
 
   @override
   void didChangeDependencies() {
@@ -33,11 +36,15 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final reportId = args?['id']?.toString() ?? 'competitor';
     final savedAdAccountId = args?['adAccountId']?.toString();
+    final isSocial = reportId == 'social';
+    final isAdsOrRoi = reportId == 'ads' || reportId == 'roi';
 
     setState(() {
       _isLoading = true;
       _errorMsg = '';
-      _adAccountId = savedAdAccountId;
+      if (_adAccountId == null) {
+        _adAccountId = savedAdAccountId;
+      }
     });
 
     try {
@@ -50,11 +57,34 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
         return;
       }
 
-      final res = await ReportService.fetchReportDetails(token: token, type: reportId, adAccountId: savedAdAccountId);
+      if (isSocial && _socialAccounts.isEmpty) {
+        final accountsRes = await ReportService.fetchSocialAccounts(token: token);
+        if (accountsRes['success'] == true) {
+          _socialAccounts = accountsRes['accounts'] as List<dynamic>? ?? [];
+          _socialAccountId ??= _socialAccounts.isNotEmpty ? _socialAccounts.first['id']?.toString() : null;
+        }
+      }
+
+      if (isAdsOrRoi && _adAccounts.isEmpty) {
+        final adAccountsRes = await ReportService.fetchAdAccounts(token: token);
+        if (adAccountsRes['success'] == true) {
+          _adAccounts = adAccountsRes['accounts'] as List<dynamic>? ?? [];
+          if (_adAccountId == null || _adAccountId == 'act_123456789' || _adAccountId == 'null') {
+            _adAccountId = _adAccounts.isNotEmpty ? _adAccounts.first['id']?.toString() : null;
+          }
+        }
+      }
+
+      final res = await ReportService.fetchReportDetails(
+        token: token,
+        type: reportId,
+        adAccountId: _adAccountId,
+        socialAccountId: isSocial ? _socialAccountId : null,
+        period: isSocial ? _socialPeriod : null,
+      );
       if (res['success'] == true && mounted) {
         setState(() {
           _reportData = res['report'];
-          _accountName = res['accountName']?.toString() ?? 'Demo Ad Account';
           _isLoading = false;
         });
       } else {
@@ -88,7 +118,7 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
     }
   }
 
-  Future<void> _downloadReport(String format) async {
+  Future<void> _downloadReport() async {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final reportId = args?['id']?.toString() ?? 'competitor';
 
@@ -96,12 +126,17 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
       final token = ref.read(authProvider).token;
       if (token == null) return;
 
-      final url = '$baseUrl/api/reports/$reportId/download?token=$token&format=$format&adAccountId=${_adAccountId ?? ""}';
+      final query = <String, String>{'token': token, 'adAccountId': _adAccountId ?? ''};
+      if (reportId == 'social') {
+        if (_socialAccountId != null) query['socialAccountId'] = _socialAccountId!;
+        query['period'] = _socialPeriod;
+      }
+      final url = Uri.parse('$baseUrl/api/reports/$reportId/download').replace(queryParameters: query).toString();
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         if (mounted) {
-          showAppSnackBar(context, '$format report download started.');
+          showAppSnackBar(context, 'CSV report download started.');
         }
       } else {
         if (mounted) {
@@ -118,8 +153,10 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final reportId = args?['id']?.toString() ?? 'competitor';
     final reportTitle = args?['title']?.toString() ?? 'Report Detail';
     final iconName = args?['iconName']?.toString() ?? 'analytics_outlined';
+    final isSocial = reportId == 'social';
 
     return Scaffold(
       body: SafeArea(
@@ -165,12 +202,45 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                                       children: [
                                         Text(_reportData?['title']?.toString() ?? reportTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                                         const SizedBox(height: 3),
-                                        Text('Report for $_accountName • ${_reportData?['date'] ?? ""}', style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                                        Text('${_reportData?['period'] ?? 'Current snapshot'} • ${_reportData?['date'] ?? ""}', style: const TextStyle(fontSize: 11, color: AppColors.muted)),
                                       ],
                                     ),
                                   ),
                                 ],
                               ),
+                              if (isSocial) ...[
+                                const SizedBox(height: 20),
+                                _SocialReportFilters(
+                                  accounts: _socialAccounts,
+                                  selectedAccountId: _socialAccountId,
+                                  period: _socialPeriod,
+                                  onAccountChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => _socialAccountId = value);
+                                      _fetchDetails();
+                                    }
+                                  },
+                                  onPeriodChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => _socialPeriod = value);
+                                      _fetchDetails();
+                                    }
+                                  },
+                                ),
+                              ],
+                              if (reportId == 'ads' || reportId == 'roi') ...[
+                                const SizedBox(height: 20),
+                                _AdReportFilters(
+                                  accounts: _adAccounts,
+                                  selectedAccountId: _adAccountId,
+                                  onAccountChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => _adAccountId = value);
+                                      _fetchDetails();
+                                    }
+                                  },
+                                ),
+                              ],
                               const SizedBox(height: 25),
                               const Text('Summary', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                               const SizedBox(height: 8),
@@ -178,7 +248,22 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                                 _reportData?['summary']?.toString() ?? 'No summary available.',
                                 style: const TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.55),
                               ),
+                              const SizedBox(height: 14),
+                              if ((_reportData?['dataStatus']?.toString() ?? '').isNotEmpty)
+                                _DataStatus(message: _reportData!['dataStatus'].toString()),
                               const SizedBox(height: 24),
+                              if (_reportData?['metrics'] is List && (_reportData?['metrics'] as List).isNotEmpty) ...[
+                                const Text('Performance Snapshot', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                                const SizedBox(height: 12),
+                                _MetricGrid(metrics: _reportData!['metrics'] as List),
+                                const SizedBox(height: 24),
+                              ],
+                              if (isSocial && _reportData?['topPosts'] is List && (_reportData?['topPosts'] as List).isNotEmpty) ...[
+                                const Text('Top Performing Content', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                                const SizedBox(height: 12),
+                                ...(_reportData!['topPosts'] as List).map<Widget>((post) => _TopPostCard(post: Map<String, dynamic>.from(post as Map))),
+                                const SizedBox(height: 14),
+                              ],
                               const Text('Key Insights', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                               const SizedBox(height: 12),
                               if (_reportData?['insights'] == null || (_reportData?['insights'] as List).isEmpty)
@@ -187,39 +272,28 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                                 ...(_reportData?['insights'] as List).map<Widget>((ins) {
                                   return _Insight(text: ins.toString());
                                 }),
+                              if (_reportData?['actions'] is List && (_reportData?['actions'] as List).isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                const Text('Recommended Next Steps', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                                const SizedBox(height: 12),
+                                ...(_reportData?['actions'] as List).map<Widget>((action) => _ActionItem(text: action.toString())),
+                              ],
                               const SizedBox(height: 30),
-                              const Text('Download Report', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                              const Text('Export Report', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                               const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => _downloadReport('PDF'),
-                                      icon: const Icon(Icons.picture_as_pdf_outlined),
-                                      label: const Text('PDF'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.danger,
-                                        backgroundColor: const Color(0xFFFFF0F2),
-                                        side: const BorderSide(color: Color(0xFFFFCDD3)),
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                      ),
-                                    ),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _downloadReport,
+                                  icon: const Icon(Icons.table_chart_outlined),
+                                  label: const Text('Download CSV (Excel-compatible)'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.success,
+                                    backgroundColor: const Color(0xFFEAF8F2),
+                                    side: const BorderSide(color: Color(0xFFBDE7D7)),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => _downloadReport('Excel'),
-                                      icon: const Icon(Icons.table_chart_outlined),
-                                      label: const Text('Excel'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.success,
-                                        backgroundColor: const Color(0xFFEAF8F2),
-                                        side: const BorderSide(color: Color(0xFFBDE7D7)),
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ],
                           ),
@@ -230,6 +304,119 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
       ),
     );
   }
+}
+
+class _SocialReportFilters extends StatelessWidget {
+  const _SocialReportFilters({required this.accounts, required this.selectedAccountId, required this.period, required this.onAccountChanged, required this.onPeriodChanged});
+  final List<dynamic> accounts;
+  final String? selectedAccountId;
+  final String period;
+  final ValueChanged<String?> onAccountChanged;
+  final ValueChanged<String?> onPeriodChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    const Text('Reporting filters', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+    const SizedBox(height: 8),
+    if (accounts.isEmpty)
+      const Text('No connected Page or Instagram professional account.', style: TextStyle(color: AppColors.muted, fontSize: 11.5))
+    else
+      DropdownButtonFormField<String>(
+        key: ValueKey(selectedAccountId),
+        initialValue: selectedAccountId,
+        isExpanded: true,
+        items: accounts.map<DropdownMenuItem<String>>((account) => DropdownMenuItem(
+          value: account['id']?.toString(),
+          child: Text('${account['platform'] == 'instagram' ? 'Instagram' : 'Facebook'} • ${account['name'] ?? 'Unnamed account'}', overflow: TextOverflow.ellipsis),
+        )).toList(),
+        onChanged: onAccountChanged,
+        decoration: const InputDecoration(labelText: 'Social account', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), border: OutlineInputBorder()),
+      ),
+    const SizedBox(height: 10),
+    SegmentedButton<String>(
+      segments: const [ButtonSegment(value: '7', label: Text('Last 7 days')), ButtonSegment(value: '30', label: Text('Last 30 days'))],
+      selected: {period},
+      onSelectionChanged: (selected) => onPeriodChanged(selected.first),
+      showSelectedIcon: false,
+      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+    ),
+  ]);
+}
+
+class _TopPostCard extends StatelessWidget {
+  const _TopPostCard({required this.post});
+  final Map<String, dynamic> post;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(post['text']?.toString() ?? 'Social post', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 8),
+      Text('${post['engagement'] ?? 0} visible interactions  •  ${post['reactions'] ?? 0} likes/reactions  •  ${post['comments'] ?? 0} comments', style: const TextStyle(fontSize: 10.5, color: AppColors.muted)),
+    ]),
+  );
+}
+
+class _DataStatus extends StatelessWidget {
+  const _DataStatus({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(11),
+    decoration: BoxDecoration(color: const Color(0xFFF5F3FF), borderRadius: BorderRadius.circular(10)),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 18),
+      const SizedBox(width: 8),
+      Expanded(child: Text(message, style: const TextStyle(color: AppColors.muted, fontSize: 11.5, height: 1.35))),
+    ]),
+  );
+}
+
+class _MetricGrid extends StatelessWidget {
+  const _MetricGrid({required this.metrics});
+  final List metrics;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 10,
+    runSpacing: 10,
+    children: metrics.map<Widget>((raw) {
+      final item = raw as Map;
+      final tone = item['tone']?.toString();
+      final color = tone == 'positive' ? AppColors.success : tone == 'attention' ? const Color(0xFFD98200) : AppColors.primary;
+      return SizedBox(width: (MediaQuery.sizeOf(context).width - 46) / 2, child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(item['label']?.toString() ?? '', style: const TextStyle(color: AppColors.muted, fontSize: 10.5, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 5),
+          Text(item['value']?.toString() ?? '—', style: TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          Text(item['detail']?.toString() ?? '', style: const TextStyle(color: AppColors.muted, fontSize: 9.5), maxLines: 2, overflow: TextOverflow.ellipsis),
+        ]),
+      ));
+    }).toList(),
+  );
+}
+
+class _ActionItem extends StatelessWidget {
+  const _ActionItem({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity, margin: const EdgeInsets.only(bottom: 9), padding: const EdgeInsets.all(11),
+    decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(10)),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Icon(Icons.lightbulb_outline_rounded, color: Color(0xFFD98200), size: 18),
+      const SizedBox(width: 9), Expanded(child: Text(text, style: const TextStyle(fontSize: 11.5, height: 1.35, fontWeight: FontWeight.w600))),
+    ]),
+  );
 }
 
 class _Insight extends StatelessWidget {
@@ -255,4 +442,31 @@ class _Insight extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AdReportFilters extends StatelessWidget {
+  const _AdReportFilters({required this.accounts, required this.selectedAccountId, required this.onAccountChanged});
+  final List<dynamic> accounts;
+  final String? selectedAccountId;
+  final ValueChanged<String?> onAccountChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    const Text('Reporting filters', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+    const SizedBox(height: 8),
+    if (accounts.isEmpty)
+      const Text('No connected Facebook Ad Accounts found.', style: TextStyle(color: AppColors.muted, fontSize: 11.5))
+    else
+      DropdownButtonFormField<String>(
+        key: ValueKey(selectedAccountId),
+        initialValue: selectedAccountId,
+        isExpanded: true,
+        items: accounts.map<DropdownMenuItem<String>>((account) => DropdownMenuItem(
+          value: account['id']?.toString(),
+          child: Text('Ad Account • ${account['name'] ?? 'Unnamed account'}', overflow: TextOverflow.ellipsis),
+        )).toList(),
+        onChanged: onAccountChanged,
+        decoration: const InputDecoration(labelText: 'Meta Ad Account', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), border: OutlineInputBorder()),
+      ),
+  ]);
 }

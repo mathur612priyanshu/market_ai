@@ -4,6 +4,7 @@ const reportController = require('../controllers/reportController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 router.get('/', authMiddleware, reportController.listReports);
+router.get('/social/accounts', authMiddleware, reportController.listSocialAccounts);
 router.get('/:type', authMiddleware, reportController.getReportDetails);
 router.get('/:type/download', authMiddleware, reportController.downloadReport);
 

@@ -59,8 +59,7 @@ class SettingsScreen extends ConsumerWidget {
                     onTap: () async {
                       ref.read(authProvider.notifier).clearSession();
                       final prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('token');
-                      await prefs.remove('user');
+                      await prefs.clear();
                       if (context.mounted) {
                         Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
                       }

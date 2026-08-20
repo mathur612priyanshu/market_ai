@@ -20,7 +20,7 @@ exports.initiateFacebook = (req, res) => {
   }
 
   // Redirect to Facebook OAuth with Business Configuration ID and required Ad scopes
-  const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&state=${userId}&scope=public_profile,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_posts,instagram_basic,instagram_content_publish,ads_management,ads_read`;
+  const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&state=${userId}&scope=public_profile,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_posts,read_insights,instagram_basic,instagram_content_publish,instagram_manage_insights,ads_management,ads_read`;
   
   return res.redirect(oauthUrl);
 };
@@ -408,5 +408,4 @@ exports.getFacebookCategories = async (req, res) => {
     });
   }
 };
-
 

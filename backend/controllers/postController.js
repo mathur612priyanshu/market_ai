@@ -6,6 +6,8 @@ const ScheduledPost = require('../models/ScheduledPost');
 
 // Endpoint: POST /api/posts/generate
 // Generates captions/hashtags using Google Gemini 1.5 Flash
+// Endpoint: POST /api/posts/generate
+// Generates captions/hashtags using Google Gemini 3.6 Flash
 exports.generatePostContent = async (req, res) => {
   const { prompt, platform, tone, type } = req.body;
 
@@ -13,14 +15,17 @@ exports.generatePostContent = async (req, res) => {
     return res.status(400).json({ success: false, error: 'Prompt is required' });
   }
 
-  // Promise to generate image via Pollinations.ai and save locally
-  const imagePromise = (async () => {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  // Helper to generate image via Pollinations.ai and save locally
+  const generatePollinationsImage = async (imagePrompt) => {
     try {
-      const encodedPrompt = encodeURIComponent(prompt + ", social media marketing banner, professional advertising graphic design");
+      const finalPrompt = `${imagePrompt}, ultra-realistic, cinematic lighting, 8k resolution, highly detailed, photorealistic, professional commercial photography, studio lighting, no text, no logo`;
+      const encodedPrompt = encodeURIComponent(finalPrompt);
       const seed = Math.floor(Math.random() * 1000000);
       const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=600&height=600&nologo=true&seed=${seed}`;
 
-      const imgResponse = await axios.get(pollinationsUrl, { responseType: 'arraybuffer', timeout: 10000 });
+      const imgResponse = await axios.get(pollinationsUrl, { responseType: 'arraybuffer', timeout: 15000 });
       
       const fileName = `creative_${Date.now()}.jpg`;
       const uploadsDir = path.join(__dirname, '../uploads');
@@ -38,14 +43,12 @@ exports.generatePostContent = async (req, res) => {
       // Fallback high-quality stock image
       return 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=60';
     }
-  })();
+  };
 
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  // Fallback mock responses if API Key is not set or fails
+  // Fallback response generator if Gemini fails or is not configured
   const getFallbackResponse = async () => {
     const defaultHashtags = `#${platform}Marketing #${tone}Tone #MarketAI #${type.replace(/\s+/g, '')}`;
-    const creativeUrl = await imagePromise;
+    const creativeUrl = await generatePollinationsImage(prompt);
     return {
       caption: `🚀 Boost your business presence with dynamic marketing! We are focusing on "${prompt}" customized for our audience. Let's make an impact today!`,
       hashtags: defaultHashtags,
@@ -60,17 +63,28 @@ exports.generatePostContent = async (req, res) => {
   }
 
   try {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
     
-    const instructionText = `Write a social media post for ${platform} about: "${prompt}". The tone should be ${tone}. The post type is ${type}. Return ONLY a JSON object in this exact format, with no markdown styling or markdown code block wrapper: { "caption": "caption content here", "hashtags": "#hashtag1 #hashtag2" }`;
+    const instructionText = `
+You are a creative social media manager. Write a social media post for ${platform} about: "${prompt}".
+The tone of the caption should be ${tone}.
+The post type is ${type}.
 
-    // Concurrently fetch from Gemini and Pollinations image downloader
-    const [geminiRes, generatedImageUrl] = await Promise.all([
-      axios.post(geminiUrl, {
-        contents: [{ parts: [{ text: instructionText }] }]
-      }, { headers: { 'Content-Type': 'application/json' } }),
-      imagePromise
-    ]);
+Also, write a highly descriptive, text-free, ultra-realistic image generation prompt for this post.
+The image prompt should describe a professional, commercial-grade photo scene.
+CRITICAL: Do NOT include any text, letters, slogans, or logos inside the image prompt. Focus only on high-quality visual scene descriptions.
+
+Return ONLY a JSON object in this exact format, with no markdown styling or markdown code block wrapper:
+{
+  "caption": "caption content here",
+  "hashtags": "#hashtag1 #hashtag2",
+  "imagePrompt": "A detailed descriptive scene prompt for generating a high-quality realistic image without any text overlays"
+}
+`;
+
+    const geminiRes = await axios.post(geminiUrl, {
+      contents: [{ parts: [{ text: instructionText }] }]
+    }, { headers: { 'Content-Type': 'application/json' } });
 
     const generatedText = geminiRes.data.candidates[0].content.parts[0].text.trim();
     
@@ -80,24 +94,31 @@ exports.generatePostContent = async (req, res) => {
       jsonString = jsonString.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
     }
 
+    let parsedData = {};
+    let imagePrompt = prompt;
+
     try {
-      const parsedData = JSON.parse(jsonString);
-      return res.status(200).json({
-        success: true,
-        caption: parsedData.caption || parsedData.text || '',
-        hashtags: parsedData.hashtags || '',
-        creativeUrl: generatedImageUrl
-      });
+      parsedData = JSON.parse(jsonString);
+      if (parsedData.imagePrompt) {
+        imagePrompt = parsedData.imagePrompt;
+      }
     } catch (parseError) {
       console.warn('Failed to parse Gemini JSON output. Raw output was:', generatedText);
-      // Regex fallback if JSON parsing failed
-      return res.status(200).json({
-        success: true,
+      parsedData = {
         caption: generatedText.substring(0, 150) + '...',
-        hashtags: `#${platform} #Marketing`,
-        creativeUrl: generatedImageUrl
-      });
+        hashtags: `#${platform} #Marketing`
+      };
     }
+
+    // Now generate the image using the custom prompt returned by Gemini
+    const generatedImageUrl = await generatePollinationsImage(imagePrompt);
+
+    return res.status(200).json({
+      success: true,
+      caption: parsedData.caption || parsedData.text || '',
+      hashtags: parsedData.hashtags || '',
+      creativeUrl: generatedImageUrl
+    });
 
   } catch (error) {
     console.error('Error generating post with Gemini:', error.message);

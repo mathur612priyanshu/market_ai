@@ -5,7 +5,7 @@ const Lead = require('../models/Lead');
 // Keep the API version in one place. v20.0 has reached end of life, so do not
 // hard-code it in individual Graph API calls. The value can be upgraded from
 // the environment without touching campaign logic.
-const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v25.0';
+const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v20.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 const SPECIAL_AD_CATEGORIES = new Set([
   'CREDIT',

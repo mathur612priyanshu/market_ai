@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../routes.dart';
 import '../../services/competitor_service.dart';
@@ -17,8 +18,16 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
   int tab = 0;
   bool isLoading = false;
   Map<String, dynamic>? analysis;
+  List<dynamic> watchlist = [];
   String? errorMessage;
   bool isFirstLoad = true;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -33,7 +42,8 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
     final routeArgs = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
     if (routeArgs != null) {
       setState(() {
-        analysis = routeArgs;
+        analysis = routeArgs['analysis'] != null ? Map<String, dynamic>.from(routeArgs['analysis']) : routeArgs;
+        watchlist = routeArgs['watchlist'] != null ? List<dynamic>.from(routeArgs['watchlist']) : [];
         isLoading = false;
         errorMessage = null;
       });
@@ -63,6 +73,7 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
       if (res['success'] == true && res['analysis'] != null && mounted) {
         setState(() {
           analysis = Map<String, dynamic>.from(res['analysis']);
+          watchlist = List<dynamic>.from(res['watchlist'] ?? []);
         });
       } else {
         if (mounted) {
@@ -84,6 +95,404 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
         });
       }
     }
+  }
+
+  Future<void> _runCustomAnalysis(String prompt) async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    try {
+      final res = await CompetitorService.analyzeCompetitors(
+        token: token,
+        prompt: prompt,
+      );
+
+      if (res['success'] == true && res['analysis'] != null && mounted) {
+        setState(() {
+          analysis = Map<String, dynamic>.from(res['analysis']);
+          watchlist = List<dynamic>.from(res['watchlist'] ?? []);
+        });
+      } else {
+        if (mounted) {
+          setState(() {
+            errorMessage = res['error'] ?? 'Failed to load competitor analysis report.';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          errorMessage = 'Error running competitor analysis: $e';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildAdSpyGallery() {
+    if (watchlist.isEmpty) {
+      if (isLoading) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          decoration: BoxDecoration(
+            color: AppColors.lavender.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Center(
+            child: Column(
+              children: [
+                CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
+                SizedBox(height: 12),
+                Text(
+                  'Analyzing and crawling competitor ads...',
+                  style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Center(
+            child: Text(
+              'No competitor ads crawled yet. Try searching for a real competitor brand above!',
+              style: TextStyle(fontSize: 11.5, color: AppColors.muted, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Competitor Ad Watchlist',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 12),
+        ...watchlist.map((item) {
+          final ads = item['ads'] as List<dynamic>? ?? [];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: AppColors.primary,
+                      child: Text(
+                        item['rank']?.toString() ?? '1',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      item['name'] ?? '',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        item['handle'] ?? '',
+                        style: const TextStyle(fontSize: 10, color: AppColors.muted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (ads.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('No active ads found for this competitor.', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: ads.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, idx) {
+                    final ad = ads[idx];
+                    final activeDays = ad['activeDays'] ?? 0;
+                    final isWinning = activeDays >= 30;
+
+                    return AppCard(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.lavender,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      ad['mediaType']?.toString().toUpperCase() ?? 'IMAGE',
+                                      style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Active: $activeDays days',
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.muted),
+                                  ),
+                                ],
+                              ),
+                              if (isWinning)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF8E1),
+                                    border: Border.all(color: const Color(0xFFFFD54F)),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.emoji_events_outlined, color: Color(0xFFF57F17), size: 10),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Winning Ad',
+                                        style: TextStyle(color: Color(0xFFF57F17), fontSize: 8, fontWeight: FontWeight.w800),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          if (ad['mediaUrl'] != null)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                ad['mediaUrl'],
+                                height: 130,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Text(
+                            ad['caption'] ?? '',
+                            style: const TextStyle(fontSize: 11.5, height: 1.45, color: Colors.black87),
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextButton.icon(
+                                  onPressed: () => _showAdBreakdown(ad),
+                                  icon: const Icon(Icons.psychology_outlined, size: 14, color: AppColors.primary),
+                                  label: const Text('AI Breakdown', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    backgroundColor: AppColors.lavender,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final url = ad['landingPageUrl']?.toString() ?? 'https://www.facebook.com/ads/library';
+                                    final uri = Uri.parse(url);
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    }
+                                  },
+                                  icon: const Icon(Icons.launch_rounded, size: 13, color: AppColors.muted),
+                                  label: Text(
+                                    ad['ctaText']?.toString() ?? 'Landing Page',
+                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.muted),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    side: const BorderSide(color: AppColors.border),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              const SizedBox(height: 16),
+            ],
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  void _showAdBreakdown(dynamic ad) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[350],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppColors.lavender,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.psychology_outlined, color: AppColors.primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'AI Ad Spy Breakdown',
+                          style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'Creative Hook & Offer Intelligence',
+                          style: TextStyle(fontSize: 10.5, color: AppColors.muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              const Text('Extracted Hook', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.lavender.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  ad['adHook']?.toString() ?? 'Direct product introduction hook.',
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primary),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text('Detected Promotional Offer', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF8F2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  ad['offer']?.toString() ?? 'No specific coupon code or promotion found.',
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.success),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text('Messaging Angle', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(
+                ad['angle']?.toString() ?? 'Pain point comparisons targeting industry standard workflows.',
+                style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.5),
+              ),
+              const SizedBox(height: 22),
+              const Divider(color: AppColors.border),
+              const SizedBox(height: 12),
+              const Text('AI Strategic Recommendation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Icon(Icons.lightbulb_outline_rounded, color: Colors.amber, size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Based on this competitor\'s high active duration (${ad['activeDays']} days), their "${ad['adHook']}" angle is working well. '
+                      'Since your current ad creative style is text-centric, we recommend testing a similar structured layout with a bold headline, using a direct "${ad['ctaText']}" action button to drive leads.',
+                      style: const TextStyle(fontSize: 11.5, height: 1.5, fontStyle: FontStyle.italic, color: Colors.black54),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 25),
+              PrimaryButton(
+                label: 'Close Analysis',
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -112,7 +521,7 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
           child: Padding(
             padding: const EdgeInsets.all(24.0),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:  MainAxisAlignment.center,
               children: [
                 const Icon(Icons.error_outline_rounded, color: Colors.red, size: 48),
                 const SizedBox(height: 12),
@@ -135,7 +544,6 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
 
     final data = analysis;
 
-    // Fallback Mock Payload if screen is opened directly or without arguments
     final competitors = data?['competitors'] as List<dynamic>? ?? const [
       {'name': 'DigiGrowth', 'handle': '@digigrowth.com', 'rank': '1'},
       {'name': 'BrandBoost', 'handle': '@brandboost.in', 'rank': '2'},
@@ -164,13 +572,6 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
       'Local Shop Owners'
     ];
 
-    final recommendedAd = data?['recommendedAd'] as Map<String, dynamic>? ?? const {
-      'headline': 'Get More Leads for Your Business',
-      'primaryText': 'We help you grow your business with result-driven digital marketing strategies.',
-      'callToAction': 'Get Free Consultation',
-      'landingPage': '/free-consultation'
-    };
-
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -185,6 +586,47 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Search Bar directly on the screen
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.search_rounded, color: AppColors.muted, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              style: const TextStyle(fontSize: 12.5),
+                              decoration: const InputDecoration(
+                                hintText: 'Search competitor brand (e.g. Swiggy, Nike)...',
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                              onSubmitted: (val) {
+                                if (val.trim().isNotEmpty) {
+                                  _runCustomAnalysis(val.trim());
+                                }
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.send_rounded, color: AppColors.primary, size: 18),
+                            onPressed: () {
+                              final val = _searchController.text.trim();
+                              if (val.isNotEmpty) {
+                                _runCustomAnalysis(val);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
                     const Text('Discovered Competitors', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     ...competitors.map((c) => _CompetitorRow(
@@ -222,7 +664,13 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
                       _getTabDescription(tab, data),
                       style: const TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.5),
                     ),
-                    const SizedBox(height: 17),
+                    const SizedBox(height: 15),
+                    
+                    if (tab == 1) ...[
+                      _buildAdSpyGallery(),
+                      const SizedBox(height: 15),
+                    ],
+
                     GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -254,14 +702,15 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
                       style: const TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.55),
                     ),
                     const SizedBox(height: 25),
-                    PrimaryButton(
-                      label: 'Use This Analysis',
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        AppRoutes.useAnalysis,
-                        arguments: recommendedAd,
-                      ),
-                    ),
+                    // "Use This Analysis" Button is commented out as requested
+                    // PrimaryButton(
+                    //   label: 'Use This Analysis',
+                    //   onPressed: () => Navigator.pushNamed(
+                    //     context,
+                    //     AppRoutes.useAnalysis,
+                    //     arguments: recommendedAd,
+                    //   ),
+                    // ),
                   ],
                 ),
               ),
@@ -287,7 +736,6 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
       }
     }
 
-    // Default static mock descriptions if no arguments
     switch (index) {
       case 1:
         return 'Review ad volume, spend estimates, campaign frequency, and the formats competitors use most.';
@@ -374,6 +822,9 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
           spacing: 8,
           runSpacing: 8,
           children: suggestions.map((s) => Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width - 60,
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -385,12 +836,16 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
               children: [
                 const Icon(Icons.person_pin_circle_outlined, size: 14, color: AppColors.primary),
                 const SizedBox(width: 5),
-                Text(
-                  s.toString(),
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.muted,
+                Flexible(
+                  child: Text(
+                    s.toString(),
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.muted,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
                   ),
                 ),
               ],
@@ -420,7 +875,25 @@ class _CompetitorRow extends StatelessWidget {
       ),
       title: Text(name, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
       subtitle: Text(handle, style: const TextStyle(fontSize: 10.5, color: AppColors.muted)),
-      trailing: const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.muted),
+      trailing: TextButton.icon(
+        onPressed: () async {
+          final query = Uri.encodeComponent(name);
+          final url = 'https://www.facebook.com/ads/library/?active_status=all&ad_type=all&q=$query&search_type=keyword_unordered';
+          final uri = Uri.parse(url);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } else {
+            showAppSnackBar(context, 'Could not open Facebook Ads Library');
+          }
+        },
+        icon: const Icon(Icons.open_in_new_rounded, size: 13, color: AppColors.primary),
+        label: const Text('View Ads', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.primary)),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          backgroundColor: AppColors.lavender,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+      ),
     );
   }
 }

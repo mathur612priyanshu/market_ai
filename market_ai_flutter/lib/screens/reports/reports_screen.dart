@@ -56,7 +56,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   List<dynamic> get filtered {
     if (tab == 0) return reports;
-    final category = ['Competitor', 'Ads', 'ROI', 'Leads'][tab - 1];
+    final category = ['Competitor', 'Ads', 'ROI', 'Leads', 'Social'][tab - 1];
     return reports.where((report) => report['category'] == category).toList();
   }
 
@@ -103,7 +103,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const tabs = ['All Reports', 'Competitor', 'Ads', 'ROI', 'Leads'];
+    const tabs = ['All Reports', 'Competitor', 'Ads', 'ROI', 'Leads', 'Social'];
     return Scaffold(
       bottomNavigationBar: const MainBottomNav(currentIndex: 1),
       body: SafeArea(
