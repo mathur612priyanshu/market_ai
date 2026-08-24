@@ -70,15 +70,16 @@ You are a creative social media manager. Write a social media post for ${platfor
 The tone of the caption should be ${tone}.
 The post type is ${type}.
 
-Also, write a highly descriptive, text-free, ultra-realistic image generation prompt for this post.
-The image prompt should describe a professional, commercial-grade photo scene.
-CRITICAL: Do NOT include any text, letters, slogans, or logos inside the image prompt. Focus only on high-quality visual scene descriptions.
+Also, provide details for finding or generating an image for this post:
+1. "imagePrompt": A highly descriptive, text-free, ultra-realistic image generation scene prompt (professional commercial photography style, no text, letters, or logos).
+2. "searchKeywords": A simple 2-3 word search query (keywords) suitable for searching realistic commercial stock photos on Unsplash (e.g., "chocolate pastry", "office brainstorming", "running shoes").
 
 Return ONLY a JSON object in this exact format, with no markdown styling or markdown code block wrapper:
 {
   "caption": "caption content here",
   "hashtags": "#hashtag1 #hashtag2",
-  "imagePrompt": "A detailed descriptive scene prompt for generating a high-quality realistic image without any text overlays"
+  "imagePrompt": "A detailed descriptive scene prompt for generating a high-quality realistic image without any text overlays",
+  "searchKeywords": "2-3 simple keywords for stock photo search"
 }
 `;
 
@@ -96,11 +97,15 @@ Return ONLY a JSON object in this exact format, with no markdown styling or mark
 
     let parsedData = {};
     let imagePrompt = prompt;
+    let searchKeywords = '';
 
     try {
       parsedData = JSON.parse(jsonString);
       if (parsedData.imagePrompt) {
         imagePrompt = parsedData.imagePrompt;
+      }
+      if (parsedData.searchKeywords) {
+        searchKeywords = parsedData.searchKeywords;
       }
     } catch (parseError) {
       console.warn('Failed to parse Gemini JSON output. Raw output was:', generatedText);
@@ -110,8 +115,35 @@ Return ONLY a JSON object in this exact format, with no markdown styling or mark
       };
     }
 
-    // Now generate the image using the custom prompt returned by Gemini
-    const generatedImageUrl = await generatePollinationsImage(imagePrompt);
+    let generatedImageUrl = null;
+
+    // 1. Try fetching from Unsplash if key and searchKeywords are available
+    if (process.env.UNSPLASH_ACCESS_KEY && searchKeywords) {
+      try {
+        console.log(`[Image Finder] Attempting Unsplash search for: "${searchKeywords}"`);
+        const unsplashRes = await axios.get('https://api.unsplash.com/search/photos', {
+          params: {
+            query: searchKeywords,
+            per_page: 1,
+            client_id: process.env.UNSPLASH_ACCESS_KEY
+          },
+          timeout: 5000
+        });
+        if (unsplashRes.data && unsplashRes.data.results && unsplashRes.data.results.length > 0) {
+          generatedImageUrl = unsplashRes.data.results[0].urls.regular;
+          console.log('[Image Finder] Found Unsplash stock image:', generatedImageUrl);
+        } else {
+          console.log('[Image Finder] No results found on Unsplash. Falling back to AI generator.');
+        }
+      } catch (unsplashErr) {
+        console.warn('[Image Finder] Unsplash API search failed. Falling back to AI generator. Error:', unsplashErr.message);
+      }
+    }
+
+    // 2. Fallback to Pollinations AI generator if Unsplash was not used or failed
+    if (!generatedImageUrl) {
+      generatedImageUrl = await generatePollinationsImage(imagePrompt);
+    }
 
     return res.status(200).json({
       success: true,
