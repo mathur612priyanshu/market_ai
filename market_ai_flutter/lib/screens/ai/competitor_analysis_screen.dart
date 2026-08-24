@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../routes.dart';
 import '../../services/competitor_service.dart';
+import '../../services/report_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -21,11 +22,11 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
   List<dynamic> watchlist = [];
   String? errorMessage;
   bool isFirstLoad = true;
-  final TextEditingController _searchController = TextEditingController();
-
+  List<dynamic> _socialAccounts = [];
+  String? _selectedPageId;
+  bool _isLoadingPages = false;
   @override
   void dispose() {
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -34,7 +35,28 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
     super.didChangeDependencies();
     if (isFirstLoad) {
       _runAnalysis();
+      _fetchSocialPages();
       isFirstLoad = false;
+    }
+  }
+
+  Future<void> _fetchSocialPages() async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    setState(() => _isLoadingPages = true);
+    try {
+      final res = await ReportService.fetchSocialAccounts(token: token);
+      if (res['success'] == true && mounted) {
+        setState(() {
+          final accounts = res['accounts'] as List<dynamic>? ?? [];
+          _socialAccounts = accounts.where((acc) => acc['platform'] == 'facebook').toList();
+          _isLoadingPages = false;
+        });
+      } else {
+        setState(() => _isLoadingPages = false);
+      }
+    } catch (_) {
+      setState(() => _isLoadingPages = false);
     }
   }
 
@@ -68,6 +90,7 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
       final res = await CompetitorService.analyzeCompetitors(
         token: token,
         prompt: 'Analyze competitors automatically based on profile',
+        facebookPageId: _selectedPageId,
       );
 
       if (res['success'] == true && res['analysis'] != null && mounted) {
@@ -110,6 +133,7 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
       final res = await CompetitorService.analyzeCompetitors(
         token: token,
         prompt: prompt,
+        facebookPageId: _selectedPageId,
       );
 
       if (res['success'] == true && res['analysis'] != null && mounted) {
@@ -586,47 +610,51 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Search Bar directly on the screen
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: AppColors.border),
-                        borderRadius: BorderRadius.circular(10),
+                    if (!_isLoadingPages && _socialAccounts.isNotEmpty) ...[
+                      const Text(
+                        'Select Facebook Page for Analysis',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search_rounded, color: AppColors.muted, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _searchController,
-                              style: const TextStyle(fontSize: 12.5),
-                              decoration: const InputDecoration(
-                                hintText: 'Search competitor brand (e.g. Swiggy, Nike)...',
-                                border: InputBorder.none,
-                                isDense: true,
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String?>(
+                            isExpanded: true,
+                            value: _selectedPageId,
+                            style: const TextStyle(fontSize: 12.5, color: Colors.black, fontWeight: FontWeight.w600),
+                            hint: const Text('Use Onboarding Profile Details'),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Use Onboarding Profile Details', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.muted)),
                               ),
-                              onSubmitted: (val) {
-                                if (val.trim().isNotEmpty) {
-                                  _runCustomAnalysis(val.trim());
-                                }
-                              },
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.send_rounded, color: AppColors.primary, size: 18),
-                            onPressed: () {
-                              final val = _searchController.text.trim();
-                              if (val.isNotEmpty) {
-                                _runCustomAnalysis(val);
-                              }
+                              ..._socialAccounts.map((page) => DropdownMenuItem<String?>(
+                                value: page['id']?.toString(),
+                                child: Text('Facebook Page • ${page['name'] ?? 'Unnamed Page'}'),
+                              )),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedPageId = val;
+                              });
+                              _runAnalysis();
                             },
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 14),
+                    ],
+
                     const Text('Discovered Competitors', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     ...competitors.map((c) => _CompetitorRow(

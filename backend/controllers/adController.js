@@ -611,20 +611,46 @@ exports.createAdOnly = async (req, res) => {
       objectStorySpec.instagram_actor_id = instagramActorId;
     }
 
-    const creativeRes = await axios.post(
-      `${META_GRAPH_BASE_URL}/${cleanAdAccountId}/adcreatives`,
-      new URLSearchParams({
-        name: `${adName} Creative`,
-        object_story_spec: JSON.stringify(objectStorySpec)
-      }),
-      {
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          'Content-Type': 'application/x-www-form-urlencoded'
+    let creativeId;
+    try {
+      const creativeRes = await axios.post(
+        `${META_GRAPH_BASE_URL}/${cleanAdAccountId}/adcreatives`,
+        new URLSearchParams({
+          name: `${adName} Creative`,
+          object_story_spec: JSON.stringify(objectStorySpec)
+        }),
+        {
+          headers: {
+            Authorization: `Bearer ${userToken}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
         }
+      );
+      creativeId = creativeRes.data.id;
+    } catch (createErr) {
+      const errMsg = createErr.response?.data?.error?.message || createErr.message;
+      if (instagramActorId && (errMsg.includes('instagram_actor_id') || errMsg.includes('Instagram account id'))) {
+        console.warn('[Ad Engine] Meta Ads API rejected the instagram_actor_id. Retrying creation without it...', errMsg);
+        delete objectStorySpec.instagram_actor_id;
+
+        const retryRes = await axios.post(
+          `${META_GRAPH_BASE_URL}/${cleanAdAccountId}/adcreatives`,
+          new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify(objectStorySpec)
+          }),
+          {
+            headers: {
+              Authorization: `Bearer ${userToken}`,
+              'Content-Type': 'application/x-www-form-urlencoded'
+            }
+          }
+        );
+        creativeId = retryRes.data.id;
+      } else {
+        throw createErr;
       }
-    );
-    const creativeId = creativeRes.data.id;
+    }
 
     const adRes = await axios.post(
       `${META_GRAPH_BASE_URL}/${cleanAdAccountId}/ads`,

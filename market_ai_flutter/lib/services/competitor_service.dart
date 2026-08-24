@@ -6,6 +6,7 @@ class CompetitorService {
   static Future<Map<String, dynamic>> analyzeCompetitors({
     required String token,
     required String prompt,
+    String? facebookPageId,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/competitor/analyze'),
@@ -13,7 +14,10 @@ class CompetitorService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode({'prompt': prompt}),
+      body: jsonEncode({
+        'prompt': prompt,
+        if (facebookPageId != null) 'facebookPageId': facebookPageId,
+      }),
     );
     return jsonDecode(response.body);
   }

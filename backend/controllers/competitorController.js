@@ -148,7 +148,7 @@ async function getWatchlistsWithAds(userId) {
 }
 
 exports.analyzeCompetitors = async (req, res) => {
-  const { prompt } = req.body;
+  const { prompt, facebookPageId } = req.body;
   if (!prompt) {
     return res.status(400).json({ success: false, error: 'Prompt is required' });
   }
@@ -172,6 +172,34 @@ exports.analyzeCompetitors = async (req, res) => {
         } catch (_) {
           services = user.businessServices;
         }
+      }
+    }
+
+    if (facebookPageId && facebookPageId !== 'null' && facebookPageId !== 'undefined') {
+      try {
+        const pageAccount = await SocialAccount.findOne({
+          where: { userId, accountId: facebookPageId, platform: 'facebook' }
+        });
+        if (pageAccount) {
+          const pageResponse = await axios.get(
+            `https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION || 'v20.0'}/${facebookPageId}`,
+            {
+              params: {
+                fields: 'name,category,about,description,website',
+                access_token: pageAccount.accessToken
+              },
+              timeout: 6000
+            }
+          );
+          if (pageResponse.status === 200 && pageResponse.data) {
+            businessName = pageResponse.data.name || businessName;
+            industry = pageResponse.data.category || industry;
+            services = pageResponse.data.about || pageResponse.data.description || services;
+            console.log(`[Ad Spy Engine] Using Facebook Page Metadata: Name="${businessName}", Category="${industry}", Services="${services.substring(0, 40)}..."`);
+          }
+        }
+      } catch (pageErr) {
+        console.warn('Could not retrieve Page details from Facebook Graph API:', pageErr.message);
       }
     }
 

@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/report_service.dart';
 import '../../server_url.dart';
@@ -122,28 +125,63 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final reportId = args?['id']?.toString() ?? 'competitor';
 
+    setState(() {
+      _isLoading = true;
+      _errorMsg = '';
+    });
+
     try {
       final token = ref.read(authProvider).token;
-      if (token == null) return;
+      if (token == null) {
+        setState(() {
+          _errorMsg = 'Auth token missing';
+          _isLoading = false;
+        });
+        return;
+      }
 
-      final query = <String, String>{'token': token, 'adAccountId': _adAccountId ?? ''};
+      final query = <String, String>{'adAccountId': _adAccountId ?? ''};
       if (reportId == 'social') {
         if (_socialAccountId != null) query['socialAccountId'] = _socialAccountId!;
         query['period'] = _socialPeriod;
       }
-      final url = Uri.parse('$baseUrl/api/reports/$reportId/download').replace(queryParameters: query).toString();
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final uri = Uri.parse('$baseUrl/api/reports/$reportId/download').replace(queryParameters: query);
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final directory = await getTemporaryDirectory();
+        final filePath = '${directory.path}/${reportId}_report_${DateTime.now().millisecondsSinceEpoch}.csv';
+        final file = File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+
+        setState(() {
+          _isLoading = false;
+        });
+
         if (mounted) {
-          showAppSnackBar(context, 'CSV report download started.');
+          showAppSnackBar(context, 'CSV report downloaded successfully!');
+          await OpenFilex.open(filePath);
         }
       } else {
+        setState(() {
+          _errorMsg = 'Server returned status: ${response.statusCode}';
+          _isLoading = false;
+        });
         if (mounted) {
-          showAppSnackBar(context, 'Could not start download.');
+          showAppSnackBar(context, 'Failed to download report.');
         }
       }
     } catch (e) {
+      setState(() {
+        _errorMsg = e.toString();
+        _isLoading = false;
+      });
       if (mounted) {
         showAppSnackBar(context, 'Download error: $e');
       }

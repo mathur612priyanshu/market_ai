@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/ad_service.dart';
+import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../routes.dart';
@@ -20,6 +22,7 @@ class _CreateAdScreenState extends ConsumerState<CreateAdScreen> {
   final creativeUrlController = TextEditingController();
 
   bool isSubmitting = false;
+  bool isUploadingImage = false;
 
   // Passed parameters
   String? adsetId;
@@ -33,6 +36,44 @@ class _CreateAdScreenState extends ConsumerState<CreateAdScreen> {
     primaryTextController.dispose();
     creativeUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (image == null) return;
+
+    setState(() {
+      isUploadingImage = true;
+    });
+
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+
+    try {
+      final res = await PostService.uploadPostMedia(token: token, filePath: image.path);
+      if (res['success'] == true && mounted) {
+        setState(() {
+          creativeUrlController.text = res['url'] ?? '';
+          isUploadingImage = false;
+        });
+        showAppSnackBar(context, 'Image uploaded successfully!');
+      } else {
+        if (mounted) {
+          setState(() {
+            isUploadingImage = false;
+          });
+          showAppSnackBar(context, res['error'] ?? 'Upload failed');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isUploadingImage = false;
+        });
+        showAppSnackBar(context, 'Upload error: $e');
+      }
+    }
   }
 
   Future<void> _publishAd() async {
@@ -201,9 +242,42 @@ class _CreateAdScreenState extends ConsumerState<CreateAdScreen> {
 
                     // Media URL
                     const FormLabel('Creative Media Image URL'),
-                    TextField(
-                      controller: creativeUrlController,
-                      decoration: const InputDecoration(hintText: 'Paste an Unsplash or static image URL'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: creativeUrlController,
+                            style: const TextStyle(fontSize: 12.5),
+                            decoration: const InputDecoration(
+                              hintText: 'Paste an Unsplash or static image URL',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 48,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.lavender,
+                              foregroundColor: AppColors.primary,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: isUploadingImage ? null : _pickAndUploadImage,
+                            icon: isUploadingImage
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                  )
+                                : const Icon(Icons.upload_file_rounded, size: 18),
+                            label: Text(
+                              isUploadingImage ? 'Uploading...' : 'Upload File',
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     const Text(
