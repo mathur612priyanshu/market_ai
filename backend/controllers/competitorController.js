@@ -2,6 +2,7 @@ const axios = require('axios');
 const User = require('../models/User');
 const CompetitorWatchlist = require('../models/CompetitorWatchlist');
 const CompetitorAd = require('../models/CompetitorAd');
+const ApiUsage = require('../models/ApiUsage');
 
 let isApifySuspended = false;
 
@@ -52,13 +53,21 @@ function getMockAdsForCompetitor(competitorName, industry, services, watchlistId
   }));
 }
 
-async function scrapeCompetitorAdsViaApify(competitorName, apifyToken) {
+async function scrapeCompetitorAdsViaApify(competitorName, apifyToken, userId) {
   if (isApifySuspended) {
     return null;
   }
 
   try {
     console.log(`[Apify Crawler] Scraping Meta Ad Library for: ${competitorName}`);
+    
+    // Log Apify crawl trigger before execution
+    await ApiUsage.create({
+      userId,
+      service: 'apify',
+      action: 'competitor_scrape',
+      status: 'success'
+    });
     const response = await axios.post(
       `https://api.apify.com/v2/acts/apify~facebook-ads-scraper/run-sync-get-dataset-items?token=${apifyToken}`,
       {
@@ -98,6 +107,14 @@ async function scrapeCompetitorAdsViaApify(competitorName, apifyToken) {
     }
   } catch (err) {
     console.warn(`[Apify Crawler] Scraper run failed for ${competitorName}:`, err.message);
+    
+    // Log Apify failure
+    await ApiUsage.create({
+      userId,
+      service: 'apify',
+      action: 'competitor_scrape',
+      status: 'failed'
+    });
     if (err.response && (err.response.status === 402 || err.response.status === 401)) {
       console.error('[Apify Crawler] Billing or Auth token expired. Suspending Apify crawler.');
       isApifySuspended = true;
@@ -397,6 +414,14 @@ Produce a detailed competitor analysis, marketing strategy, AND 3 high-convertin
 
     parsed = JSON.parse(jsonString);
 
+    // Log Gemini analysis success
+    await ApiUsage.create({
+      userId,
+      service: 'gemini',
+      action: 'competitor_analysis',
+      status: 'success'
+    });
+
     // Save competitors and ads concurrently in 1 operation
     const competitorsList = parsed.competitors || [];
     await Promise.all(competitorsList.map(async (comp) => {
@@ -412,7 +437,7 @@ Produce a detailed competitor analysis, marketing strategy, AND 3 high-convertin
         // Determine which ads to save (scraped live or simulated from Gemini bundle)
         let parsedAds = null;
         if (apifyToken && apifyToken !== 'your_apify_token_here') {
-          parsedAds = await scrapeCompetitorAdsViaApify(comp.name, apifyToken);
+          parsedAds = await scrapeCompetitorAdsViaApify(comp.name, apifyToken, userId);
         }
 
         // If apify is suspended or returned 0 results, use the rich pre-generated ads from Gemini response
@@ -444,6 +469,14 @@ Produce a detailed competitor analysis, marketing strategy, AND 3 high-convertin
 
   } catch (err) {
     console.error('Error generating competitor analysis:', err.message);
+    
+    // Log Gemini failure
+    await ApiUsage.create({
+      userId,
+      service: 'gemini',
+      action: 'competitor_analysis',
+      status: 'failed'
+    });
     return res.status(500).json({ success: false, error: err.message });
   }
 };
@@ -515,10 +548,28 @@ Format the response as a JSON object in this exact schema, with no markdown code
     }
 
     const parsed = JSON.parse(jsonString);
+
+    // Log Gemini AI Search success
+    await ApiUsage.create({
+      userId,
+      service: 'gemini',
+      action: 'ai_search',
+      status: 'success'
+    });
+
     return res.status(200).json({ success: true, results: parsed });
 
   } catch (err) {
     console.error('Error running AI search:', err.message);
+
+    // Log Gemini AI Search failure
+    await ApiUsage.create({
+      userId,
+      service: 'gemini',
+      action: 'ai_search',
+      status: 'failed'
+    });
+
     return res.status(500).json({ success: false, error: err.message });
   }
 };

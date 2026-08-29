@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const SocialAccount = require('../models/SocialAccount');
 const ScheduledPost = require('../models/ScheduledPost');
+const ApiUsage = require('../models/ApiUsage');
 
 // Endpoint: POST /api/posts/generate
 // Generates captions/hashtags using Google Gemini 1.5 Flash
@@ -145,6 +146,14 @@ Return ONLY a JSON object in this exact format, with no markdown styling or mark
       generatedImageUrl = await generatePollinationsImage(imagePrompt);
     }
 
+    // Log dynamic API Usage for post generation
+    await ApiUsage.create({
+      userId: req.user.id,
+      service: 'gemini',
+      action: 'post_generation',
+      status: 'success'
+    });
+
     return res.status(200).json({
       success: true,
       caption: parsedData.caption || parsedData.text || '',
@@ -154,6 +163,15 @@ Return ONLY a JSON object in this exact format, with no markdown styling or mark
 
   } catch (error) {
     console.error('Error generating post with Gemini:', error.message);
+    
+    // Log failed post generation attempt
+    await ApiUsage.create({
+      userId: req.user.id,
+      service: 'gemini',
+      action: 'post_generation',
+      status: 'failed'
+    });
+
     const fallbackRes = await getFallbackResponse();
     return res.status(200).json({ success: true, ...fallbackRes });
   }
@@ -163,7 +181,7 @@ Return ONLY a JSON object in this exact format, with no markdown styling or mark
 // Schedules a post in the database or publishes it immediately using Meta Graph APIs
 exports.publishOrSchedulePost = async (req, res) => {
   const userId = req.user.id;
-  const { platform, caption, hashtags, mediaUrl, scheduledTime } = req.body;
+  const { platform, caption, hashtags, mediaUrl, scheduledTime, prompt, tone, type } = req.body;
 
   if (!platform || !caption) {
     return res.status(400).json({ success: false, error: 'Platform and caption are required' });
@@ -186,7 +204,10 @@ exports.publishOrSchedulePost = async (req, res) => {
           hashtags,
           mediaUrl,
           scheduledTime: scheduleDate,
-          status: 'pending'
+          status: 'pending',
+          prompt,
+          tone,
+          type
         });
 
         return res.status(200).json({
@@ -281,8 +302,13 @@ exports.publishOrSchedulePost = async (req, res) => {
       hashtags,
       mediaUrl,
       scheduledTime: new Date(),
-      status: 'published'
+      status: 'published',
+      prompt,
+      tone,
+      type
     });
+
+
 
     return res.status(200).json({
       success: true,
@@ -303,8 +329,13 @@ exports.publishOrSchedulePost = async (req, res) => {
       mediaUrl,
       scheduledTime: new Date(),
       status: 'failed',
-      errorMessage: errorDetails
+      errorMessage: errorDetails,
+      prompt,
+      tone,
+      type
     });
+
+
 
     return res.status(500).json({
       success: false,

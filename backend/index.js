@@ -6,9 +6,53 @@ const sequelize = require('./config/db');
 // Register models for Sequelize auto-sync
 require('./models/CompetitorWatchlist');
 require('./models/CompetitorAd');
+require('./models/Admin');
 
 // Load environment variables
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+const axios = require('axios');
+const ApiUsage = require('./models/ApiUsage');
+
+// Global Axios Interceptor to log Meta Graph API usage
+axios.interceptors.response.use(
+  async (response) => {
+    try {
+      const url = response.config.url || '';
+      if (url.includes('graph.facebook.com')) {
+        const userId = response.config.metadata?.userId || null;
+        const action = url.split('graph.facebook.com/')[1]?.split('?')[0] || 'graph_call';
+        await ApiUsage.create({
+          userId,
+          service: 'meta',
+          action: action.substring(0, 255),
+          status: 'success'
+        });
+      }
+    } catch (err) {
+      console.error('[Axios Meta Interceptor Error]:', err.message);
+    }
+    return response;
+  },
+  async (error) => {
+    try {
+      const config = error.config;
+      if (config && config.url && config.url.includes('graph.facebook.com')) {
+        const userId = config.metadata?.userId || null;
+        const action = config.url.split('graph.facebook.com/')[1]?.split('?')[0] || 'graph_call';
+        await ApiUsage.create({
+          userId,
+          service: 'meta',
+          action: action.substring(0, 255),
+          status: 'failed'
+        });
+      }
+    } catch (err) {
+      console.error('[Axios Meta Interceptor Error]:', err.message);
+    }
+    return Promise.reject(error);
+  }
+);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,6 +63,7 @@ const postRoutes = require('./routes/postRoutes');
 const competitorRoutes = require('./routes/competitorRoutes');
 const adRoutes = require('./routes/adRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 // Middleware
 app.use(cors());
@@ -39,6 +84,7 @@ app.use('/api/posts', postRoutes);
 app.use('/api/competitor', competitorRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Standard Status Endpoint
 app.get('/api/status', (req, res) => {

@@ -44,6 +44,18 @@ const ScheduledPost = sequelize.define('ScheduledPost', {
   errorMessage: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  prompt: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  tone: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  type: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   timestamps: true

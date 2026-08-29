@@ -51,6 +51,14 @@ const User = sequelize.define('User', {
   businessLogo: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  plan: {
+    type: DataTypes.STRING,
+    defaultValue: 'Free'
+  },
+  status: {
+    type: DataTypes.STRING,
+    defaultValue: 'active'
   }
 }, {
   timestamps: true
