@@ -14,7 +14,7 @@ const FacebookIcon = ({ size = 16, ...props }) => (
   </svg>
 );
 
-export default function Usage({ apiCosts, handleUpdateApiCost, usageStats }) {
+export default function Usage({ apiCosts, handleUpdateApiCost, handleSaveApiCosts, usageStats }) {
   const totalGeminiCalls = usageStats ? usageStats.geminiCalls : 0;
   const totalApifyCrawls = usageStats ? usageStats.apifyCrawls : 0;
   const totalMetaRequests = usageStats ? usageStats.metaCalls : 0;
@@ -113,6 +113,16 @@ export default function Usage({ apiCosts, handleUpdateApiCost, usageStats }) {
                   onChange={(e) => handleUpdateApiCost('geminiLimit', e.target.value)}
                 />
               </div>
+            </div>
+            
+            <div className="flex justify-end mt-4">
+              <button
+                type="button"
+                onClick={handleSaveApiCosts}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-purple hover:bg-accent-purple-hover text-white text-xs font-semibold cursor-pointer transition-all shadow-glow"
+              >
+                <span>Save Cost Settings</span>
+              </button>
             </div>
           </div>
         </div>

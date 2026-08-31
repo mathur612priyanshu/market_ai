@@ -103,11 +103,33 @@ function App() {
     }
   };
 
+  const fetchApiCosts = async () => {
+    try {
+      const response = await fetch('http://localhost:5001/api/plans/config', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (data.success && data.config) {
+        setApiCosts({
+          geminiCost: String(data.config.gemini_cost !== undefined ? data.config.gemini_cost : '0.035'),
+          apifyCost: String(data.config.apify_cost !== undefined ? data.config.apify_cost : '0.12'),
+          metaCost: String(data.config.meta_cost !== undefined ? data.config.meta_cost : '0.005'),
+          geminiLimit: String(data.config.gemini_limit !== undefined ? data.config.gemini_limit : '300')
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching API cost configurations:', error.message);
+    }
+  };
+
   useEffect(() => {
     if (token) {
       fetchUsers();
       fetchPosts();
       fetchUsageStats();
+      fetchApiCosts();
     }
   }, [token]);
 
@@ -118,11 +140,11 @@ function App() {
   ]);
 
   const [apiCosts, setApiCosts] = useState({
-    geminiCost: 0.035, // average per generation
-    apifyCost: 0.12,   // average per crawl
-    metaCost: 0.005,   // average per request
-    geminiLimit: 300,
-    apifyLimit: 150,
+    geminiCost: '0.035', // average per generation
+    apifyCost: '0.12',   // average per crawl
+    metaCost: '0.005',   // average per request
+    geminiLimit: '300',
+    apifyLimit: '150',
   });
 
   // --- Handlers ---
@@ -154,7 +176,40 @@ function App() {
   };
 
   const handleUpdateApiCost = (key, value) => {
-    setApiCosts({ ...apiCosts, [key]: Number(value) });
+    setApiCosts({ ...apiCosts, [key]: value });
+  };
+
+  const handleSaveApiCosts = async () => {
+    try {
+      const response = await fetch('http://localhost:5001/api/plans/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          gemini_cost: apiCosts.geminiCost,
+          apify_cost: apiCosts.apifyCost,
+          meta_cost: apiCosts.metaCost,
+          gemini_limit: apiCosts.geminiLimit
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setApiCosts({
+          geminiCost: String(data.config.gemini_cost),
+          apifyCost: String(data.config.apify_cost),
+          metaCost: String(data.config.meta_cost),
+          geminiLimit: String(data.config.gemini_limit)
+        });
+        alert('API unit costs saved successfully to database!');
+      } else {
+        alert('Failed to save costs config: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error saving API costs config:', error.message);
+      alert('Network error. Failed to save.');
+    }
   };
 
   if (!token) {
@@ -214,10 +269,15 @@ function App() {
           <Posts posts={posts} />
         )}
         {activeTab === 'usage' && (
-          <Usage apiCosts={apiCosts} handleUpdateApiCost={handleUpdateApiCost} usageStats={usageStats} />
+          <Usage 
+            apiCosts={apiCosts} 
+            handleUpdateApiCost={handleUpdateApiCost} 
+            handleSaveApiCosts={handleSaveApiCosts}
+            usageStats={usageStats} 
+          />
         )}
         {activeTab === 'plans' && (
-          <Plans plans={plans} handleUpdatePlanLimit={handleUpdatePlanLimit} />
+          <Plans />
         )}
       </main>
     </div>

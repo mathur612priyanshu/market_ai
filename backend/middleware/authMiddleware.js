@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const context = require('../services/contextService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'market_ai_jwt_secret_key';
 
@@ -18,7 +19,11 @@ module.exports = (req, res, next) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     req.user = decoded;
-    next();
+    
+    // Bind current authenticated userId to AsyncLocalStorage context
+    context.run(decoded.id, () => {
+      next();
+    });
   } catch (error) {
     console.error('JWT Verification Error:', error.message);
     return res.status(401).json({ success: false, message: 'Invalid or expired token' });

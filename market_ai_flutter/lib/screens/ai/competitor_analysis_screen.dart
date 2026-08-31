@@ -100,6 +100,9 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
         });
       } else {
         if (mounted) {
+          if (res['error'] == 'paywall_block') {
+            showPaywallDialog(context, res['message'] ?? 'Quota limit reached.');
+          }
           setState(() {
             errorMessage = res['error'] ?? 'Failed to load competitor analysis report.';
           });
@@ -143,6 +146,9 @@ class _CompetitorAnalysisScreenState extends ConsumerState<CompetitorAnalysisScr
         });
       } else {
         if (mounted) {
+          if (res['error'] == 'paywall_block') {
+            showPaywallDialog(context, res['message'] ?? 'Quota limit reached.');
+          }
           setState(() {
             errorMessage = res['error'] ?? 'Failed to load competitor analysis report.';
           });

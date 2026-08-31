@@ -55,7 +55,11 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
         }
       } else {
         if (mounted) {
-          showAppSnackBar(context, res['error'] ?? 'Search failed. Please try again.');
+          if (res['error'] == 'paywall_block') {
+            showPaywallDialog(context, res['message'] ?? 'Quota limit reached.');
+          } else {
+            showAppSnackBar(context, res['error'] ?? 'Search failed. Please try again.');
+          }
         }
       }
     } catch (e) {

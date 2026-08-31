@@ -7,12 +7,15 @@ const sequelize = require('./config/db');
 require('./models/CompetitorWatchlist');
 require('./models/CompetitorAd');
 require('./models/Admin');
+require('./models/SystemConfig');
+require('./models/RechargeHistory');
 
 // Load environment variables
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const axios = require('axios');
 const ApiUsage = require('./models/ApiUsage');
+const context = require('./services/contextService');
 
 // Global Axios Interceptor to log Meta Graph API usage
 axios.interceptors.response.use(
@@ -20,7 +23,7 @@ axios.interceptors.response.use(
     try {
       const url = response.config.url || '';
       if (url.includes('graph.facebook.com')) {
-        const userId = response.config.metadata?.userId || null;
+        const userId = response.config.metadata?.userId || context.getStore() || null;
         const action = url.split('graph.facebook.com/')[1]?.split('?')[0] || 'graph_call';
         await ApiUsage.create({
           userId,
@@ -38,7 +41,7 @@ axios.interceptors.response.use(
     try {
       const config = error.config;
       if (config && config.url && config.url.includes('graph.facebook.com')) {
-        const userId = config.metadata?.userId || null;
+        const userId = config.metadata?.userId || context.getStore() || null;
         const action = config.url.split('graph.facebook.com/')[1]?.split('?')[0] || 'graph_call';
         await ApiUsage.create({
           userId,
@@ -64,6 +67,7 @@ const competitorRoutes = require('./routes/competitorRoutes');
 const adRoutes = require('./routes/adRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const plansRoutes = require('./routes/plansRoutes');
 
 // Middleware
 app.use(cors());
@@ -85,6 +89,7 @@ app.use('/api/competitor', competitorRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/plans', plansRoutes);
 
 // Standard Status Endpoint
 app.get('/api/status', (req, res) => {
@@ -106,6 +111,30 @@ async function startServer() {
     // Sync models
     await sequelize.sync(); 
     console.log('Database models synchronized.');
+
+    // Seed default system configurations if missing
+    const SystemConfig = require('./models/SystemConfig');
+    const defaultConfigs = [
+      { key: 'base_day_price', value: '50.0' },
+      { key: 'discount_1_month', value: '10' },
+      { key: 'discount_3_months', value: '20' },
+      { key: 'discount_6_months', value: '30' },
+      { key: 'discount_12_months', value: '40' },
+      { key: 'free_daily_posts_limit', value: '3' },
+      { key: 'free_monthly_watchlist_limit', value: '5' },
+      { key: 'gemini_cost', value: '0.035' },
+      { key: 'apify_cost', value: '0.12' },
+      { key: 'meta_cost', value: '0.005' },
+      { key: 'gemini_limit', value: '300' }
+    ];
+
+    for (const config of defaultConfigs) {
+      await SystemConfig.findOrCreate({
+        where: { key: config.key },
+        defaults: { value: config.value }
+      });
+    }
+    console.log('System configurations seeded successfully.');
     
     // Start background scheduled posts publisher
     const { startScheduler } = require('./services/scheduler');

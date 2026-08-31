@@ -84,7 +84,16 @@ async function scrapeCompetitorAdsViaApify(competitorName, apifyToken, userId) {
 
     if (response.status === 200 && Array.isArray(response.data) && response.data.length > 0) {
       console.log(`[Apify Crawler] Found ${response.data.length} ads for ${competitorName}`);
-      return response.data.map(item => {
+      const defaultImages = [
+        'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80',
+        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=600&q=80',
+        'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=600&q=80',
+        'https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=600&q=80',
+        'https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&w=600&q=80',
+        'https://images.unsplash.com/photo-1557200134-90327ee9fafa?auto=format&fit=crop&w=600&q=80'
+      ];
+
+      return response.data.map((item, idx) => {
         const adCopy = item.adCopy || item.text || item.caption || '';
         let mediaType = 'image';
         if (item.mediaType) {
@@ -95,10 +104,31 @@ async function scrapeCompetitorAdsViaApify(competitorName, apifyToken, userId) {
           mediaType = 'carousel';
         }
 
+        // Try extracting mediaUrl from diverse crawler outputs
+        let mediaUrl = item.mediaUrl || item.imageUrl || item.videoUrl;
+        if (!mediaUrl) {
+          if (item.images && item.images.length > 0) {
+            mediaUrl = item.images[0];
+          } else if (item.videos && item.videos.length > 0) {
+            mediaUrl = item.videos[0];
+          } else if (item.adCreativeImage) {
+            mediaUrl = item.adCreativeImage;
+          } else if (item.adCreativeImageUrl) {
+            mediaUrl = item.adCreativeImageUrl;
+          } else if (item.snapshotUrl) {
+            mediaUrl = item.snapshotUrl;
+          }
+        }
+
+        // Use index-based distinct fallback image if empty
+        if (!mediaUrl) {
+          mediaUrl = defaultImages[idx % defaultImages.length];
+        }
+
         return {
           caption: adCopy,
           mediaType: mediaType,
-          mediaUrl: item.mediaUrl || item.imageUrl || item.videoUrl || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80',
+          mediaUrl: mediaUrl,
           landingPageUrl: item.landingPage || item.landingPageUrl || 'https://www.facebook.com/ads/library',
           ctaText: item.ctaText || item.ctaType || 'Learn More',
           startedAt: item.startDate || item.startedAt || new Date().toISOString()

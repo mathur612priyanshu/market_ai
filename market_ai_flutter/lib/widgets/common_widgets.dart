@@ -619,3 +619,63 @@ void showAppSnackBar(BuildContext context, String message) {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(message)));
 }
+
+void showPaywallDialog(BuildContext context, String message) {
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      icon: const Icon(
+        Icons.workspace_premium_rounded,
+        color: AppColors.primary,
+        size: 50,
+      ),
+      title: const Text(
+        'Usage Limit Reached',
+        style: TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: 19,
+          color: AppColors.text,
+        ),
+      ),
+      content: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 13,
+          height: 1.4,
+          color: AppColors.muted,
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.spaceEvenly,
+      actionsPadding: const EdgeInsets.only(bottom: 20, left: 16, right: 16),
+      actions: [
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.text,
+            side: const BorderSide(color: AppColors.border),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Maybe Later'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          ),
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.pushNamed(context, AppRoutes.subscription);
+          },
+          child: const Text('Upgrade Plan'),
+        ),
+      ],
+    ),
+  );
+}

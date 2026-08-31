@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const postController = require('../controllers/postController');
 const authMiddleware = require('../middleware/authMiddleware');
+const quotaMiddleware = require('../middleware/quotaMiddleware');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -28,7 +29,7 @@ const upload = multer({
 });
 
 // Route for generating AI post content (Protected)
-router.post('/generate', authMiddleware, postController.generatePostContent);
+router.post('/generate', authMiddleware, quotaMiddleware, postController.generatePostContent);
 
 // Route for publishing or scheduling a social post (Protected)
 router.post('/schedule', authMiddleware, postController.publishOrSchedulePost);

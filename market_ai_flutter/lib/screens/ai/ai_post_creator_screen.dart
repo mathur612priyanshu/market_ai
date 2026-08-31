@@ -64,7 +64,11 @@ class _AiPostCreatorScreenState extends ConsumerState<AiPostCreatorScreen> {
         }
       } else {
         if (mounted) {
-          showAppSnackBar(context, res['error'] ?? 'Failed to generate post');
+          if (res['error'] == 'paywall_block') {
+            showPaywallDialog(context, res['message'] ?? 'Quota limit reached.');
+          } else {
+            showAppSnackBar(context, res['error'] ?? 'Failed to generate post');
+          }
         }
       }
     } catch (e) {
