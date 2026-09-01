@@ -7,6 +7,7 @@ import Usage from './pages/Usage';
 import Plans from './pages/Plans';
 import Login from './pages/Login';
 import Posts from './pages/Posts';
+import { API_BASE_URL } from './config';
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -38,7 +39,7 @@ function App() {
   // Fetch users dynamically from the backend MySQL database
   const fetchUsers = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -57,7 +58,7 @@ function App() {
   // Fetch posts dynamically from the backend MySQL database
   const fetchPosts = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/admin/posts', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/posts`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -84,7 +85,7 @@ function App() {
 
   const fetchUsageStats = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/admin/usage', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/usage`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -105,7 +106,7 @@ function App() {
 
   const fetchApiCosts = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/plans/config', {
+      const response = await fetch(`${API_BASE_URL}/api/plans/config`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -150,7 +151,7 @@ function App() {
   // --- Handlers ---
   const handleUpdateUserPlan = async (userId, newPlan) => {
     try {
-      const response = await fetch(`http://localhost:5001/api/admin/users/${userId}/plan`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/plan`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -181,7 +182,7 @@ function App() {
 
   const handleSaveApiCosts = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/plans/config', {
+      const response = await fetch(`${API_BASE_URL}/api/plans/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

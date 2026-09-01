@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Database
 } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 export default function Plans() {
   const [config, setConfig] = useState({
@@ -28,7 +29,7 @@ export default function Plans() {
   // Fetch current pricing configurations from backend
   const fetchConfig = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/plans/config', {
+      const response = await fetch(`${API_BASE_URL}/api/plans/config`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -60,7 +61,7 @@ export default function Plans() {
     setSaving(true);
     setMessage('');
     try {
-      const response = await fetch('http://localhost:5001/api/plans/config', {
+      const response = await fetch(`${API_BASE_URL}/api/plans/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
