@@ -1,6 +1,14 @@
+const { Op } = require('sequelize');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const Admin = require('../models/Admin');
+const User = require('../models/User');
+const SocialAccount = require('../models/SocialAccount');
+const ScheduledPost = require('../models/ScheduledPost');
+const CompetitorWatchlist = require('../models/CompetitorWatchlist');
+const ApiUsage = require('../models/ApiUsage');
+const RechargeHistory = require('../models/RechargeHistory');
+const SystemConfig = require('../models/SystemConfig');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'market_ai_jwt_secret_key';
 
@@ -74,9 +82,6 @@ exports.me = async (req, res) => {
   }
 };
 
-const User = require('../models/User');
-const SocialAccount = require('../models/SocialAccount');
-
 exports.getUsers = async (req, res) => {
   try {
     const usersList = await User.findAll({
@@ -87,8 +92,9 @@ exports.getUsers = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    const formatted = usersList.map(user => {
+    const formatted = await Promise.all(usersList.map(async (user) => {
       const platforms = user.SocialAccounts ? user.SocialAccounts.map(sa => sa.platform) : [];
+      const userUsageCount = await ApiUsage.count({ where: { userId: user.id } });
       return {
         id: user.id,
         name: user.name || 'Anonymous User',
@@ -98,9 +104,9 @@ exports.getUsers = async (req, res) => {
         status: user.status || 'active',
         joined: user.createdAt ? user.createdAt.toISOString().split('T')[0] : 'N/A',
         platforms,
-        usage: 0
+        usage: userUsageCount
       };
-    });
+    }));
 
     return res.status(200).json({ success: true, users: formatted });
   } catch (error) {
@@ -132,8 +138,6 @@ exports.updateUserPlan = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
-
-const ScheduledPost = require('../models/ScheduledPost');
 
 exports.getPosts = async (req, res) => {
   try {
@@ -169,10 +173,6 @@ exports.getPosts = async (req, res) => {
   }
 };
 
-const CompetitorWatchlist = require('../models/CompetitorWatchlist');
-
-const ApiUsage = require('../models/ApiUsage');
-
 exports.getUsageStats = async (req, res) => {
   try {
     // Count exact logged executions of each service
@@ -205,6 +205,111 @@ exports.getUsageStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching admin usage stats:', error.message);
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+// Endpoint: GET /api/admin/dashboard-summary
+// Dynamically aggregated metrics, charts, KPIs, revenue and feature breakdowns
+exports.getDashboardSummary = async (req, res) => {
+  try {
+    // 1. Core KPIs
+    const totalUsers = await User.count();
+    const activeProUsers = await User.count({ where: { plan: 'Pro' } });
+    const totalRechargesCount = await RechargeHistory.count({ where: { status: 'completed' } });
+    const totalRevenueSum = await RechargeHistory.sum('amount', { where: { status: 'completed' } }) || 0;
+
+    // 2. Real API Usages
+    const geminiCalls = await ApiUsage.count({ where: { service: 'gemini' } });
+    const apifyCrawls = await ApiUsage.count({ where: { service: 'apify' } });
+    const metaCalls = await ApiUsage.count({ where: { service: 'meta' } });
+
+    // 3. Dynamic API Cost Calculation
+    const geminiCostConfig = await SystemConfig.findByPk('gemini_cost');
+    const apifyCostConfig = await SystemConfig.findByPk('apify_cost');
+    const metaCostConfig = await SystemConfig.findByPk('meta_cost');
+
+    const geminiCost = Number(geminiCostConfig?.value || 0.035);
+    const apifyCost = Number(apifyCostConfig?.value || 0.12);
+    const metaCost = Number(metaCostConfig?.value || 0.005);
+
+    const totalApiSpend = (
+      (geminiCalls * geminiCost) +
+      (apifyCrawls * apifyCost) +
+      (metaCalls * metaCost)
+    ).toFixed(2);
+
+    // 4. Feature Usage Breakdown from Real Database Logs
+    const postGenCount = await ApiUsage.count({ where: { action: 'post_generation' } });
+    const competitorCount = await ApiUsage.count({ 
+      where: { 
+        action: { [Op.in]: ['competitor_analysis', 'ai_search'] } 
+      } 
+    });
+    const scheduledPostsCount = await ScheduledPost.count();
+    const metaSyncCount = metaCalls;
+
+    const featureUsage = [
+      { name: 'AI Post Generator', count: postGenCount, fill: '#9d4edd' },
+      { name: 'Competitor Spy', count: competitorCount, fill: '#5390d9' },
+      { name: 'Post Scheduler', count: scheduledPostsCount, fill: '#4cc9f0' },
+      { name: 'Social/Meta Sync', count: metaSyncCount, fill: '#06d6a0' },
+    ];
+
+    // 5. Dynamic User Growth Chart
+    const userRecords = await User.findAll({
+      attributes: ['createdAt'],
+      order: [['createdAt', 'ASC']]
+    });
+
+    const growthMap = {};
+    let cumulative = 0;
+    userRecords.forEach(u => {
+      if (u.createdAt) {
+        const d = new Date(u.createdAt);
+        const label = `${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]}`;
+        cumulative += 1;
+        growthMap[label] = cumulative;
+      }
+    });
+
+    let userGrowth = Object.keys(growthMap).map(key => ({
+      name: key,
+      users: growthMap[key]
+    }));
+
+    if (userGrowth.length === 0) {
+      userGrowth = [{ name: 'Today', users: totalUsers }];
+    }
+
+    // 6. Recent Recharges Audit List
+    const recentRecharges = await RechargeHistory.findAll({
+      include: [{
+        model: User,
+        attributes: ['name', 'email', 'phone']
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: 5
+    });
+
+    return res.status(200).json({
+      success: true,
+      summary: {
+        totalUsers,
+        activeProUsers,
+        totalRevenue: Number(totalRevenueSum).toFixed(2),
+        totalRechargesCount,
+        totalApiSpend,
+        geminiCalls,
+        apifyCrawls,
+        metaCalls,
+        featureUsage,
+        userGrowth,
+        recentRecharges
+      }
+    });
+  } catch (error) {
+    console.error('Error calculating dynamic dashboard summary:', error.message);
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };

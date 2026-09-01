@@ -261,7 +261,7 @@ function App() {
       {/* Dynamic Main Panel viewports */}
       <main className="flex-1 h-full overflow-y-auto p-4 md:p-8 flex flex-col">
         {activeTab === 'overview' && (
-          <Dashboard users={users} plans={plans} apiCosts={apiCosts} />
+          <Dashboard users={users} />
         )}
         {activeTab === 'users' && (
           <Users users={users} handleUpdateUserPlan={handleUpdateUserPlan} />

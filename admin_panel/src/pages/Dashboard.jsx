@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Award,
@@ -6,7 +6,10 @@ import {
   Database,
   TrendingUp,
   ShieldAlert,
-  Flame
+  Flame,
+  CreditCard,
+  CheckCircle2,
+  Calendar
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -19,6 +22,7 @@ import {
   Bar,
   Cell
 } from 'recharts';
+import { API_BASE_URL } from '../config';
 
 const FacebookIcon = ({ size = 16, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -34,48 +38,84 @@ const InstagramIcon = ({ size = 16, ...props }) => (
   </svg>
 );
 
-export default function Dashboard({ users, plans, apiCosts }) {
-  // Chart Data
-  const userGrowthData = [
-    { name: 'July 25', users: 12 },
-    { name: 'July 30', users: 19 },
-    { name: 'Aug 05', users: 27 },
-    { name: 'Aug 10', users: 42 },
-    { name: 'Aug 15', users: 58 },
-    { name: 'Aug 20', users: 84 },
-    { name: 'Aug 25', users: 112 },
-  ];
+export default function Dashboard({ users }) {
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const token = localStorage.getItem('admin_token');
 
-  const featureUsageData = [
-    { name: 'Ad Generator', count: 542, fill: '#9d4edd' },
-    { name: 'Competitor Spy', count: 320, fill: '#5390d9' },
-    { name: 'Post Scheduler', count: 180, fill: '#4cc9f0' },
-    { name: 'Leads Sync', count: 412, fill: '#06d6a0' },
-  ];
+  const fetchDashboardSummary = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/dashboard-summary`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (data.success && data.summary) {
+        setSummary(data.summary);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard summary:', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Calculations
-  const activeSubscribersCount = users.filter(u => u.plan !== 'Free' && u.status === 'active').length;
-  
-  const monthlyRevenue = plans.reduce((acc, plan) => {
-    const planUsers = users.filter(u => u.plan.toLowerCase() === plan.name.split(' ')[0].toLowerCase() || (u.plan === 'Pro' && plan.id === 'pro') || (u.plan === 'Enterprise' && plan.id === 'enterprise'));
-    return acc + (planUsers.length * plan.price);
-  }, 0);
+  useEffect(() => {
+    fetchDashboardSummary();
+  }, [token]);
 
-  const totalGeminiCalls = 1450;
-  const totalApifyCrawls = 680;
-  const totalMetaRequests = 2890;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-sm font-semibold text-slate-400">Loading dynamic metrics from server...</div>
+      </div>
+    );
+  }
 
-  const totalApiSpend = (
-    (totalGeminiCalls * apiCosts.geminiCost) +
-    (totalApifyCrawls * apiCosts.apifyCost) +
-    (totalMetaRequests * apiCosts.metaCost)
-  ).toFixed(2);
+  const totalUsers = summary?.totalUsers || users.length || 0;
+  const activePro = summary?.activeProUsers || 0;
+  const totalRevenue = summary?.totalRevenue || '0.00';
+  const totalApiSpend = summary?.totalApiSpend || '0.00';
+  const userGrowthData = summary?.userGrowth || [{ name: 'Today', users: totalUsers }];
+  const featureUsageData = summary?.featureUsage || [];
+  const recentRecharges = summary?.recentRecharges || [];
+
+  const conversionRate = totalUsers > 0 ? ((activePro / totalUsers) * 100).toFixed(1) : '0';
 
   const statsItems = [
-    { title: 'Total Registered Users', value: users.length, icon: Users, color: 'text-accent-purple bg-accent-purple/10', delta: '+24% vs last week', isDeltaUp: true },
-    { title: 'Active Subscribers', value: activeSubscribersCount, icon: Award, color: 'text-accent-cyan bg-accent-cyan/10', delta: '57.1% conversion rate', isDeltaUp: true },
-    { title: 'Monthly Recur. Revenue', value: `$${monthlyRevenue}`, icon: DollarSign, color: 'text-accent-green bg-accent-green/10', delta: '+18% profit margins', isDeltaUp: true },
-    { title: 'API Server Expenses', value: `$${totalApiSpend}`, icon: Database, color: 'text-accent-pink bg-accent-pink/10', delta: 'Google & Apify billing active', isDeltaUp: false },
+    { 
+      title: 'Total Registered Users', 
+      value: totalUsers, 
+      icon: Users, 
+      color: 'text-accent-purple bg-accent-purple/10', 
+      delta: `${users.length} active database profiles`, 
+      isDeltaUp: true 
+    },
+    { 
+      title: 'Active Pro Subscribers', 
+      value: activePro, 
+      icon: Award, 
+      color: 'text-accent-cyan bg-accent-cyan/10', 
+      delta: `${conversionRate}% conversion rate`, 
+      isDeltaUp: activePro > 0 
+    },
+    { 
+      title: 'Total Recharge Revenue', 
+      value: `₹${totalRevenue}`, 
+      icon: DollarSign, 
+      color: 'text-accent-green bg-accent-green/10', 
+      delta: `${summary?.totalRechargesCount || 0} completed orders`, 
+      isDeltaUp: true 
+    },
+    { 
+      title: 'Estimated API Expenses', 
+      value: `₹${totalApiSpend}`, 
+      icon: Database, 
+      color: 'text-accent-pink bg-accent-pink/10', 
+      delta: `${(summary?.geminiCalls || 0) + (summary?.apifyCrawls || 0) + (summary?.metaCalls || 0)} total API hits`, 
+      isDeltaUp: false 
+    },
   ];
 
   return (
@@ -83,7 +123,7 @@ export default function Dashboard({ users, plans, apiCosts }) {
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold font-display text-slate-100">Overview Dashboard</h1>
-          <p className="text-[13.5px] text-slate-400">Real-time telemetry, platform stats, and system performance metrics.</p>
+          <p className="text-[13.5px] text-slate-400">100% Real-time database telemetry, revenue logs, and usage metrics.</p>
         </div>
       </header>
 
@@ -100,7 +140,7 @@ export default function Dashboard({ users, plans, apiCosts }) {
                 </div>
               </div>
               <div className="text-2xl font-extrabold font-display text-slate-100 mb-1.5">{stat.value}</div>
-              <div className={`text-[11.5px] flex items-center gap-1 ${stat.isDeltaUp ? 'text-accent-green' : 'text-slate-500'}`}>
+              <div className={`text-[11.5px] flex items-center gap-1 ${stat.isDeltaUp ? 'text-accent-green' : 'text-slate-400'}`}>
                 {stat.isDeltaUp && <TrendingUp size={13} />}
                 {!stat.isDeltaUp && <ShieldAlert size={13} />}
                 <span>{stat.delta}</span>
@@ -110,12 +150,12 @@ export default function Dashboard({ users, plans, apiCosts }) {
         })}
       </div>
 
-      {/* Charts Grid */}
+      {/* Dynamic Charts Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <div className="xl:col-span-2 p-6 rounded-2xl bg-dark-secondary border border-white/5 flex flex-col">
           <div className="mb-5">
-            <h3 className="text-base font-semibold text-slate-100 font-display">User Base Accumulation</h3>
-            <p className="text-[11.5px] text-slate-500">Total users over the past 30 days</p>
+            <h3 className="text-base font-semibold text-slate-100 font-display">User Base Growth Timeline</h3>
+            <p className="text-[11.5px] text-slate-500">Live cumulative registrations from database</p>
           </div>
           <div className="h-[250px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -137,14 +177,14 @@ export default function Dashboard({ users, plans, apiCosts }) {
 
         <div className="p-6 rounded-2xl bg-dark-secondary border border-white/5 flex flex-col">
           <div className="mb-5">
-            <h3 className="text-base font-semibold text-slate-100 font-display">Top Feature Hits</h3>
-            <p className="text-[11.5px] text-slate-500">AI integrations usage breakdown</p>
+            <h3 className="text-base font-semibold text-slate-100 font-display">Top Feature Breakdown</h3>
+            <p className="text-[11.5px] text-slate-500">Real API actions logged in ApiUsages</p>
           </div>
           <div className="h-[250px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={featureUsageData} layout="vertical">
                 <XAxis type="number" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={11} tickLine={false} width={100} />
+                <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={11} tickLine={false} width={110} />
                 <Tooltip contentStyle={{ background: '#111524', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '8px' }} />
                 <Bar dataKey="count" radius={[0, 6, 6, 0]}>
                   {featureUsageData.map((entry, index) => (
@@ -157,55 +197,107 @@ export default function Dashboard({ users, plans, apiCosts }) {
         </div>
       </div>
 
-      {/* Recent activity list */}
-      <div className="p-6 rounded-2xl bg-dark-secondary border border-white/5">
-        <div className="mb-4">
-          <h3 className="text-base font-semibold text-slate-100 font-display">Recent Registrations</h3>
+      {/* Two Column Layout: Recent Recharges & Recent Registrations */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        {/* Recent Subscriptions / Recharges */}
+        <div className="p-6 rounded-2xl bg-dark-secondary border border-white/5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-slate-100 font-display flex items-center gap-2">
+                <CreditCard size={18} className="text-accent-green" />
+                Recent Recharge Transactions
+              </h3>
+              <p className="text-[11.5px] text-slate-500">Live order audit logs from RechargeHistories</p>
+            </div>
+          </div>
+          <div className="w-full overflow-x-auto">
+            {recentRecharges.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-[13px]">No recharges recorded yet.</div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">User / Phone</th>
+                    <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Package</th>
+                    <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Amount</th>
+                    <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Date</th>
+                    <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRecharges.map(rec => (
+                    <tr key={rec.id} className="border-b border-white/5 last:border-b-0 hover:bg-white/[0.01] transition-all">
+                      <td className="p-3 text-[12.5px] font-semibold text-slate-200">
+                        <div>{rec.User?.name || 'User #' + rec.userId}</div>
+                        <div className="text-[10.5px] text-slate-500 font-mono">{rec.User?.phone || rec.transactionId}</div>
+                      </td>
+                      <td className="p-3 text-[12px] text-slate-300 font-medium">{rec.planName}</td>
+                      <td className="p-3 text-[12.5px] font-bold text-accent-green">₹{rec.amount}</td>
+                      <td className="p-3 text-[11.5px] text-slate-400">
+                        {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td className="p-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-accent-green/12 text-accent-green">
+                          <CheckCircle2 size={11} />
+                          {rec.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-        <div className="w-full overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="py-3.5 px-4 text-[11.5px] font-bold uppercase tracking-wider text-slate-400">User Name</th>
-                <th className="py-3.5 px-4 text-[11.5px] font-bold uppercase tracking-wider text-slate-400">Email ID</th>
-                <th className="py-3.5 px-4 text-[11.5px] font-bold uppercase tracking-wider text-slate-400">Joined Date</th>
-                <th className="py-3.5 px-4 text-[11.5px] font-bold uppercase tracking-wider text-slate-400">Social Channels</th>
-                <th className="py-3.5 px-4 text-[11.5px] font-bold uppercase tracking-wider text-slate-400">Billing Plan</th>
-                <th className="py-3.5 px-4 text-[11.5px] font-bold uppercase tracking-wider text-slate-400">API Load</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.slice(0, 4).map(user => (
-                <tr key={user.id} className="border-b border-white/5 last:border-b-0 hover:bg-white/[0.01] transition-all">
-                  <td className="p-4 text-[13px] font-semibold text-slate-200">{user.name}</td>
-                  <td className="p-4 text-[13px] text-slate-400">{user.email}</td>
-                  <td className="p-4 text-[13px] text-slate-400">{user.joined}</td>
-                  <td className="p-4">
-                    <div className="flex gap-2 text-slate-400">
-                      {user.platforms.includes('facebook') && <FacebookIcon size={16} />}
-                      {user.platforms.includes('instagram') && <InstagramIcon size={16} />}
-                      {user.platforms.length === 0 && <span className="text-slate-500 text-[11.5px]">None</span>}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wide ${
-                      user.plan === 'Enterprise' ? 'bg-accent-cyan/12 text-accent-cyan' :
-                      user.plan === 'Pro' ? 'bg-accent-purple/12 text-accent-purple' :
-                      'bg-slate-400/12 text-slate-400'
-                    }`}>
-                      {user.plan}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <span className="flex items-center gap-1 text-[12px] font-semibold text-slate-200">
-                      <Flame size={12} className="text-accent-orange" />
-                      {user.usage} ops
-                    </span>
-                  </td>
+
+        {/* Recent Registrations */}
+        <div className="p-6 rounded-2xl bg-dark-secondary border border-white/5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-slate-100 font-display flex items-center gap-2">
+                <Users size={18} className="text-accent-purple" />
+                Recent User Registrations
+              </h3>
+              <p className="text-[11.5px] text-slate-500">Latest signed-up accounts</p>
+            </div>
+          </div>
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Name / Phone</th>
+                  <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Joined</th>
+                  <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Plan</th>
+                  <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">API Load</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.slice(0, 5).map(user => (
+                  <tr key={user.id} className="border-b border-white/5 last:border-b-0 hover:bg-white/[0.01] transition-all">
+                    <td className="p-3 text-[12.5px] font-semibold text-slate-200">
+                      <div>{user.name}</div>
+                      <div className="text-[10.5px] text-slate-500 font-mono">{user.phone}</div>
+                    </td>
+                    <td className="p-3 text-[12px] text-slate-400">{user.joined}</td>
+                    <td className="p-3">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold ${
+                        user.plan === 'Pro' ? 'bg-accent-purple/12 text-accent-purple' :
+                        'bg-slate-400/12 text-slate-400'
+                      }`}>
+                        {user.plan}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span className="flex items-center gap-1 text-[11.5px] font-semibold text-slate-200">
+                        <Flame size={12} className="text-accent-orange" />
+                        {user.usage} ops
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

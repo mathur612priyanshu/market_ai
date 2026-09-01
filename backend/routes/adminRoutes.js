@@ -16,4 +16,7 @@ router.get('/posts', authMiddleware, adminController.getPosts);
 // Usage stats endpoints
 router.get('/usage', authMiddleware, adminController.getUsageStats);
 
+// Dashboard dynamic aggregated KPIs
+router.get('/dashboard-summary', authMiddleware, adminController.getDashboardSummary);
+
 module.exports = router;
