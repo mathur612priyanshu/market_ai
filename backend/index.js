@@ -79,8 +79,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve uploads folder as static files
+// Serve public and uploads folders as static files
+app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Public Compliance & Legal Pages (Required for Meta App Review)
+app.get('/privacy-policy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+});
+
+app.get('/terms-of-service', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'terms-of-service.html'));
+});
+
+app.get('/data-deletion', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'data-deletion.html'));
+});
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
