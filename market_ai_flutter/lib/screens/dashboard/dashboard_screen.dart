@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/ad_service.dart';
+import '../../services/report_exporter.dart';
 import '../../routes.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -16,15 +17,15 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Map<String, dynamic> _stats = {
-    'totalLeads': '248',
-    'leadsChange': '+12.5%',
-    'adSpend': '₹12,500',
-    'spendChange': '-5.2%',
-    'spendPositive': false,
-    'roi': '3.8x',
-    'roiChange': '+18.8%',
-    'reach': '45.2K',
-    'reachChange': '+8.7%'
+    'totalLeads': '0',
+    'leadsChange': '0.0%',
+    'adSpend': '₹0',
+    'spendChange': '0.0%',
+    'spendPositive': true,
+    'roi': '0.0x',
+    'roiChange': '0.0%',
+    'reach': '0',
+    'reachChange': '0.0%'
   };
 
   String _accountName = 'Loading...';
@@ -86,18 +87,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final userName = authState.user?['name']?.toString() ?? 'User';
+    final profilePic = authState.user?['profilePicture']?.toString();
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: const AppDrawer(),
       bottomNavigationBar: const MainBottomNav(currentIndex: 0),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Container(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     colors: [AppColors.primaryDark, AppColors.primaryLight],
@@ -106,81 +112,89 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                   borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
                 ),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Hello, $userName 👋', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 5),
-                          if (adAccounts.isEmpty)
-                            Text("Here's your business overview • $_accountName", style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500))
-                          else ...[
-                            const Text("Here's your business overview", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-                            const SizedBox(height: 10),
-                            Theme(
-                              data: Theme.of(context).copyWith(
-                                canvasColor: AppColors.primary,
-                              ),
-                              child: Container(
-                                height: 38,
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.white24),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: _selectedAdAccountId,
-                                    isExpanded: true,
-                                    dropdownColor: AppColors.primary,
-                                    icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.white),
-                                    style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold),
-                                    items: adAccounts.map<DropdownMenuItem<String>>((acc) {
-                                      return DropdownMenuItem<String>(
-                                        value: acc['id']?.toString(),
-                                        child: Text(
-                                          acc['name']?.toString() ?? 'Unnamed Account',
-                                          style: const TextStyle(color: Colors.white),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) async {
-                                      if (value != null) {
-                                        final prefs = await SharedPreferences.getInstance();
-                                        await prefs.setString('ad_account_id', value);
-                                        setState(() {
-                                          _selectedAdAccountId = value;
-                                        });
-                                        _fetchDashboardStats(value);
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        InkWell(
+                          onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    InkWell(
-                      onTap: () => Navigator.pushNamed(context, AppRoutes.settings),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(.16),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white24),
+                            child: const Icon(Icons.menu_rounded, color: Colors.white, size: 22),
+                          ),
                         ),
-                        child: const Icon(Icons.person_rounded, color: Colors.white),
-                      ),
+                        UserAvatar(
+                          size: 38,
+                          imageUrl: profilePic,
+                          name: userName,
+                          showBorder: true,
+                          borderWidth: 2,
+                          borderColor: Colors.white,
+                          backgroundColor: Colors.white24,
+                          iconColor: Colors.white,
+                          onTap: () => Navigator.pushNamed(context, AppRoutes.settings),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 14),
+                    Text('Hello, $userName 👋', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 5),
+                    if (adAccounts.isEmpty)
+                      Text("Here's your business overview • $_accountName", style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500))
+                    else ...[
+                      const Text("Here's your business overview", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 10),
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          canvasColor: AppColors.primary,
+                        ),
+                        child: Container(
+                          height: 38,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedAdAccountId,
+                              isExpanded: true,
+                              dropdownColor: AppColors.primary,
+                              icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.white),
+                              style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold),
+                              items: adAccounts.map<DropdownMenuItem<String>>((acc) {
+                                return DropdownMenuItem<String>(
+                                  value: acc['id']?.toString(),
+                                  child: Text(
+                                    acc['name']?.toString() ?? 'Unnamed Account',
+                                    style: const TextStyle(color: Colors.white),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) async {
+                                if (value != null) {
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.setString('ad_account_id', value);
+                                  setState(() {
+                                    _selectedAdAccountId = value;
+                                  });
+                                  _fetchDashboardStats(value);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -276,24 +290,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ],
                   ),
                   _RecentReport(
-                    icon: Icons.analytics_outlined,
-                    title: 'Competitor Analysis',
-                    date: 'May 24, 2024',
+                    icon: Icons.people_outline_rounded,
+                    title: 'Lead Generation Report',
+                    date: 'Synced Leads & Pipeline',
                     onTap: () => Navigator.pushNamed(
                       context,
                       AppRoutes.reportDetails,
                       arguments: {
-                        'id': 'competitor',
-                        'title': 'Competitor Analysis Report',
-                        'iconName': 'analytics_outlined',
+                        'id': 'leads',
+                        'title': 'Lead Generation Report',
+                        'iconName': 'people_outline_rounded',
                       },
                     ),
+                    onDownload: () => _downloadReport('leads', 'Lead Generation Report'),
                   ),
                   const SizedBox(height: 8),
                   _RecentReport(
                     icon: Icons.campaign_outlined,
                     title: 'Ad Performance Report',
-                    date: 'May 23, 2024',
+                    date: 'Meta Ad Delivery & CTR',
                     onTap: () => Navigator.pushNamed(
                       context,
                       AppRoutes.reportDetails,
@@ -303,6 +318,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         'iconName': 'campaign_outlined',
                       },
                     ),
+                    onDownload: () => _downloadReport('ads', 'Ad Performance Report'),
                   ),
                 ]),
               ),
@@ -311,6 +327,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _downloadReport(String id, String title) async {
+    try {
+      final token = ref.read(authProvider).token;
+      if (token == null) {
+        showAppSnackBar(context, 'Session expired. Please log in.');
+        return;
+      }
+
+      await ReportExporter.exportReport(
+        context: context,
+        token: token,
+        reportType: id,
+        reportTitle: title,
+        adAccountId: _selectedAdAccountId,
+      );
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Export error: $e');
+      }
+    }
   }
 }
 
@@ -347,11 +385,18 @@ class _QuickAction extends StatelessWidget {
 }
 
 class _RecentReport extends StatelessWidget {
-  const _RecentReport({required this.icon, required this.title, required this.date, required this.onTap});
+  const _RecentReport({
+    required this.icon,
+    required this.title,
+    required this.date,
+    required this.onTap,
+    this.onDownload,
+  });
   final IconData icon;
   final String title;
   final String date;
   final VoidCallback onTap;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -378,7 +423,7 @@ class _RecentReport extends StatelessWidget {
             ),
           ),
           IconButton(
-            onPressed: () => showAppSnackBar(context, '$title downloaded'),
+            onPressed: onDownload ?? () => showAppSnackBar(context, '$title downloaded'),
             icon: const Icon(Icons.download_rounded, size: 20, color: AppColors.muted),
           ),
         ],

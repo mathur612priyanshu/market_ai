@@ -23,7 +23,14 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
   double totalRevenue = 0.0;
   double roi = 0.0;
   double profit = 0.0;
+  int totalLeads = 0;
+  int totalClicks = 0;
+  int totalImpressions = 0;
+  double costPerLead = 0.0;
+  double costPerClick = 0.0;
   List<dynamic> chartPoints = [];
+
+  String chartMetric = 'spend'; // 'spend', 'roi', 'leads'
 
   List<dynamic> adAccounts = [];
   bool isLoadingAccounts = true;
@@ -98,7 +105,17 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
           totalRevenue = double.tryParse(metrics['totalRevenue']?.toString() ?? '0') ?? 0.0;
           roi = double.tryParse(metrics['roi']?.toString() ?? '0') ?? 0.0;
           profit = double.tryParse(metrics['profit']?.toString() ?? '0') ?? 0.0;
+          totalLeads = int.tryParse(metrics['totalLeads']?.toString() ?? '0') ?? 0;
+          totalClicks = int.tryParse(metrics['totalClicks']?.toString() ?? '0') ?? 0;
+          totalImpressions = int.tryParse(metrics['totalImpressions']?.toString() ?? '0') ?? 0;
+          costPerLead = double.tryParse(metrics['costPerLead']?.toString() ?? '0') ?? 0.0;
+          costPerClick = double.tryParse(metrics['costPerClick']?.toString() ?? '0') ?? 0.0;
           chartPoints = res['chartData'] ?? [];
+          
+          // Auto select chart metric if ROI is 0 but spend/leads exist
+          if (roi == 0 && totalSpent > 0 && chartMetric == 'roi') {
+            chartMetric = 'spend';
+          }
           isLoading = false;
         });
       } else {
@@ -117,9 +134,21 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final doubleValues = chartPoints
-        .map<double>((p) => double.tryParse(p['roi']?.toString() ?? '0') ?? 0.0)
-        .toList();
+    List<double> doubleValues = [];
+    if (chartMetric == 'spend') {
+      doubleValues = chartPoints
+          .map<double>((p) => double.tryParse(p['spend']?.toString() ?? '0') ?? 0.0)
+          .toList();
+    } else if (chartMetric == 'leads') {
+      doubleValues = chartPoints
+          .map<double>((p) => double.tryParse(p['leads']?.toString() ?? '0') ?? 0.0)
+          .toList();
+    } else {
+      doubleValues = chartPoints
+          .map<double>((p) => double.tryParse(p['roi']?.toString() ?? '0') ?? 0.0)
+          .toList();
+    }
+
     final dateLabels = chartPoints
         .map<String>((p) => p['date']?.toString() ?? '')
         .toList();
@@ -134,7 +163,7 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
-              child: ScreenHeader(title: 'ROI Tracker', subtitle: 'Track your return on investment.'),
+              child: ScreenHeader(title: 'ROI & Ad Performance', subtitle: 'Track your ad spend, returns, and leads.'),
             ),
             const SizedBox(height: 12),
             
@@ -150,7 +179,10 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
                       items: const [
                         DropdownMenuItem(value: 'this_month', child: Text('This Month')),
                         DropdownMenuItem(value: 'last_month', child: Text('Last Month')),
-                        DropdownMenuItem(value: 'this_quarter', child: Text('This Quarter')),
+                        DropdownMenuItem(value: 'last_30d', child: Text('Last 30 Days')),
+                        DropdownMenuItem(value: 'last_90d', child: Text('Last 90 Days')),
+                        DropdownMenuItem(value: 'this_year', child: Text('This Year')),
+                        DropdownMenuItem(value: 'maximum', child: Text('Lifetime / All Time')),
                       ],
                       onChanged: (value) {
                         if (value != null) {
@@ -234,25 +266,66 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
                                   crossAxisSpacing: 10,
                                   children: [
                                     MetricCard(label: 'Total Spent', value: '₹${totalSpent.toStringAsFixed(2)}', change: ''),
-                                    MetricCard(label: 'Total Revenue', value: '₹${totalRevenue.toStringAsFixed(2)}', change: ''),
-                                    MetricCard(label: 'ROI', value: '${roi.toStringAsFixed(2)}x', change: ''),
-                                    MetricCard(label: 'Profit', value: '₹${profit.toStringAsFixed(2)}', change: ''),
+                                    MetricCard(
+                                      label: totalRevenue > 0 ? 'Total Revenue' : 'Direct Revenue',
+                                      value: '₹${totalRevenue.toStringAsFixed(2)}',
+                                      change: totalRevenue > 0 ? '${roi.toStringAsFixed(2)}x ROI' : 'No pixel cart',
+                                    ),
+                                    MetricCard(
+                                      label: 'Leads Generated',
+                                      value: '$totalLeads',
+                                      change: costPerLead > 0 ? '₹${costPerLead.toStringAsFixed(1)} / lead' : '',
+                                    ),
+                                    MetricCard(
+                                      label: 'Clicks & Reach',
+                                      value: '$totalClicks Clicks',
+                                      change: totalImpressions > 0 ? '$totalImpressions views' : '',
+                                    ),
                                   ],
                                 ),
-                                const SizedBox(height: 25),
-                                const Text('ROI Over Time', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 13),
+                                const SizedBox(height: 22),
+                                
+                                // Chart Section Header & Toggle Buttons
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Performance Trend', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
+                                    Row(
+                                      children: [
+                                        _buildChartToggleChip('Spend', 'spend'),
+                                        const SizedBox(width: 5),
+                                        _buildChartToggleChip('Leads', 'leads'),
+                                        const SizedBox(width: 5),
+                                        _buildChartToggleChip('ROI', 'roi'),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
                                 AppCard(
                                   padding: const EdgeInsets.fromLTRB(12, 18, 12, 11),
-                                  child: SizedBox(
-                                    height: 230,
-                                    width: double.infinity,
-                                    child: CustomPaint(
-                                      painter: _RoiChartPainter(
-                                        values: finalValues,
-                                        labels: finalLabels,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        chartMetric == 'spend' 
+                                            ? 'Daily Ad Spend (₹)' 
+                                            : (chartMetric == 'leads' ? 'Daily Leads Acquired' : 'Daily ROI (Multiplier)'),
+                                        style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.bold),
                                       ),
-                                    ),
+                                      const SizedBox(height: 10),
+                                      SizedBox(
+                                        height: 210,
+                                        width: double.infinity,
+                                        child: CustomPaint(
+                                          painter: _RoiChartPainter(
+                                            values: finalValues,
+                                            labels: finalLabels,
+                                            isCurrency: chartMetric == 'spend',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 const SizedBox(height: 18),
@@ -274,9 +347,7 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
                                             const Text('AI Insight', style: TextStyle(fontWeight: FontWeight.w800)),
                                             const SizedBox(height: 3),
                                             Text(
-                                              roi > 1
-                                                  ? 'ROI is positive! Scale the best performing campaigns to generate more revenue.'
-                                                  : 'No return detected yet. Monitor campaign metrics and verify pixel integrations.',
+                                              _buildInsightText(),
                                               style: const TextStyle(fontSize: 11.5, color: AppColors.muted),
                                             ),
                                           ],
@@ -298,6 +369,46 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildChartToggleChip(String label, String value) {
+    final isSelected = chartMetric == value;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          chartMetric = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : AppColors.muted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _buildInsightText() {
+    if (totalSpent == 0) {
+      return 'No active ad spend found in the selected timeframe. Switch timeframe to "Lifetime / All Time" to review past campaign metrics.';
+    }
+    if (totalRevenue > totalSpent) {
+      return 'Positive ROI! You generated ₹${totalRevenue.toStringAsFixed(2)} from ₹${totalSpent.toStringAsFixed(2)} ad spend (${roi.toStringAsFixed(2)}x return).';
+    }
+    if (totalLeads > 0) {
+      return 'Acquired $totalLeads total leads at an average ₹${costPerLead.toStringAsFixed(2)} CPL. Converting these client leads will scale your direct business ROI.';
+    }
+    return '₹${totalSpent.toStringAsFixed(2)} spent with $totalClicks clicks. Connect your Meta Pixel or Lead forms to measure direct revenue conversion.';
   }
 
   Widget _buildMissingAccountState() {
@@ -343,8 +454,13 @@ class _RoiTrackerScreenState extends ConsumerState<RoiTrackerScreen> {
 class _RoiChartPainter extends CustomPainter {
   final List<double> values;
   final List<String> labels;
+  final bool isCurrency;
 
-  _RoiChartPainter({required this.values, required this.labels});
+  _RoiChartPainter({
+    required this.values,
+    required this.labels,
+    this.isCurrency = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -371,7 +487,7 @@ class _RoiChartPainter extends CustomPainter {
     final maxValue = values.reduce((a, b) => a > b ? a : b);
     
     final range = maxValue - minValue;
-    final divisor = range == 0 ? 1.0 : range;
+    final divisor = range == 0 ? (maxValue == 0 ? 1.0 : maxValue) : range;
 
     final path = Path();
     for (var i = 0; i < values.length; i++) {
@@ -379,7 +495,7 @@ class _RoiChartPainter extends CustomPainter {
           ? chartRect.left + chartRect.width / 2
           : chartRect.left + chartRect.width * i / (values.length - 1);
       final normalized = (values[i] - minValue) / divisor;
-      final y = chartRect.bottom - chartRect.height * normalized;
+      final y = chartRect.bottom - chartRect.height * (range == 0 && maxValue > 0 ? 0.5 : normalized);
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -389,7 +505,7 @@ class _RoiChartPainter extends CustomPainter {
     }
     canvas.drawPath(path, linePaint);
 
-    final labelStep = (labels.length / 4).ceil();
+    final labelStep = (labels.length / 4).ceil().clamp(1, 999);
     for (var i = 0; i < labels.length; i += labelStep) {
       if (i >= labels.length) break;
       final painter = TextPainter(

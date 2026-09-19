@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Menu, Layers } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -10,7 +11,7 @@ import Posts from './pages/Posts';
 import { API_BASE_URL } from './config';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('admin_token') || null);
   const [adminUser, setAdminUser] = useState(() => {
@@ -25,6 +26,7 @@ function App() {
   const handleLoginSuccess = (tok, usr) => {
     setToken(tok);
     setAdminUser(usr);
+    navigate('/', { replace: true });
   };
 
   const handleLogout = () => {
@@ -32,6 +34,7 @@ function App() {
     localStorage.removeItem('admin_user');
     setToken(null);
     setAdminUser(null);
+    navigate('/login', { replace: true });
   };
 
   const [users, setUsers] = useState([]);
@@ -104,6 +107,14 @@ function App() {
     }
   };
 
+  const [apiCosts, setApiCosts] = useState({
+    geminiCost: '0.035', // average per generation
+    apifyCost: '0.12',   // average per crawl
+    metaCost: '0.005',   // average per request
+    geminiLimit: '300',
+    apifyLimit: '150',
+  });
+
   const fetchApiCosts = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/plans/config`, {
@@ -134,19 +145,6 @@ function App() {
     }
   }, [token]);
 
-  const [plans, setPlans] = useState([
-    { id: 'free', name: 'Free Tier', price: 0, adsLimit: 3, spyLimit: 5, postsLimit: 5, leadsLimit: 50, active: true },
-    { id: 'pro', name: 'Growth Pro', price: 29, adsLimit: 50, spyLimit: 100, postsLimit: 100, leadsLimit: 1000, active: true },
-    { id: 'enterprise', name: 'Agency Enterprise', price: 99, adsLimit: 999, spyLimit: 999, postsLimit: 999, leadsLimit: 9999, active: true },
-  ]);
-
-  const [apiCosts, setApiCosts] = useState({
-    geminiCost: '0.035', // average per generation
-    apifyCost: '0.12',   // average per crawl
-    metaCost: '0.005',   // average per request
-    geminiLimit: '300',
-    apifyLimit: '150',
-  });
 
   // --- Handlers ---
   const handleUpdateUserPlan = async (userId, newPlan) => {
@@ -172,12 +170,8 @@ function App() {
     }
   };
 
-  const handleUpdatePlanLimit = (planId, key, value) => {
-    setPlans(plans.map(p => p.id === planId ? { ...p, [key]: Number(value) } : p));
-  };
-
   const handleUpdateApiCost = (key, value) => {
-    setApiCosts({ ...apiCosts, [key]: value });
+    setApiCosts(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSaveApiCosts = async () => {
@@ -214,7 +208,12 @@ function App() {
   };
 
   if (!token) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <Routes>
+        <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
   }
 
   return (
@@ -249,40 +248,39 @@ function App() {
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <Sidebar
-          activeTab={activeTab}
-          setActiveTab={(tab) => {
-            setActiveTab(tab);
-            setIsSidebarOpen(false); // Auto close sidebar on mobile click
-          }}
+          adminUser={adminUser}
           onLogout={handleLogout}
+          onCloseMobile={() => setIsSidebarOpen(false)}
         />
       </div>
 
-      {/* Dynamic Main Panel viewports */}
+      {/* Dynamic Main Panel viewports mapped to URL Routes */}
       <main className="flex-1 h-full overflow-y-auto p-4 md:p-8 flex flex-col">
-        {activeTab === 'overview' && (
-          <Dashboard users={users} />
-        )}
-        {activeTab === 'users' && (
-          <Users users={users} handleUpdateUserPlan={handleUpdateUserPlan} />
-        )}
-        {activeTab === 'posts' && (
-          <Posts posts={posts} />
-        )}
-        {activeTab === 'usage' && (
-          <Usage 
-            apiCosts={apiCosts} 
-            handleUpdateApiCost={handleUpdateApiCost} 
-            handleSaveApiCosts={handleSaveApiCosts}
-            usageStats={usageStats} 
+        <Routes>
+          <Route path="/" element={<Dashboard users={users} />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/overview" element={<Navigate to="/" replace />} />
+          <Route path="/users" element={<Users users={users} handleUpdateUserPlan={handleUpdateUserPlan} />} />
+          <Route path="/posts" element={<Posts posts={posts} />} />
+          <Route 
+            path="/usage" 
+            element={
+              <Usage 
+                apiCosts={apiCosts} 
+                handleUpdateApiCost={handleUpdateApiCost} 
+                handleSaveApiCosts={handleSaveApiCosts}
+                usageStats={usageStats} 
+              />
+            } 
           />
-        )}
-        {activeTab === 'plans' && (
-          <Plans />
-        )}
+          <Route path="/plans" element={<Plans />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
   );
 }
 
 export default App;
+

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../routes.dart';
+import '../../services/auth_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -26,14 +27,18 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
   List<dynamic> mediaList = [];
   bool isInitialized = false;
 
+  List<dynamic> _connectedAccounts = [];
+  bool _isLoadingAccounts = true;
+  String? _selectedAccountId;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!isInitialized) {
       final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-      platform = args['platform'] as String;
-      caption = args['caption'] as String;
-      hashtags = args['hashtags'] as String;
+      platform = args['platform'] as String? ?? 'Facebook';
+      caption = args['caption'] as String? ?? '';
+      hashtags = args['hashtags'] as String? ?? '';
       
       if (args['mediaList'] != null) {
         mediaList = args['mediaList'] as List<dynamic>;
@@ -45,6 +50,44 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
       
       creativeUrl = mediaList.isNotEmpty ? (mediaList.first['url'] as String? ?? '') : '';
       isInitialized = true;
+      _loadSocialAccounts();
+    }
+  }
+
+  Future<void> _loadSocialAccounts() async {
+    final session = ref.read(authProvider);
+    final token = session.token;
+    if (token == null) return;
+
+    setState(() => _isLoadingAccounts = true);
+    try {
+      final res = await AuthService.fetchSocialStatus(token);
+      if (res['success'] == true && mounted) {
+        final accounts = res['accounts'] as List<dynamic>? ?? [];
+        setState(() {
+          _connectedAccounts = accounts;
+          _isLoadingAccounts = false;
+          _updateSelectedAccountForPlatform(platform);
+        });
+      } else {
+        if (mounted) setState(() => _isLoadingAccounts = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingAccounts = false);
+    }
+  }
+
+  void _updateSelectedAccountForPlatform(String currentPlatform) {
+    final targetPlat = currentPlatform.toLowerCase();
+    final matching = _connectedAccounts.where((acc) => acc['platform'] == targetPlat).toList();
+    if (matching.isNotEmpty) {
+      // Keep existing selection if it exists in the matching list
+      final stillExists = matching.any((acc) => acc['accountId']?.toString() == _selectedAccountId);
+      if (!stillExists) {
+        _selectedAccountId = matching.first['accountId']?.toString();
+      }
+    } else {
+      _selectedAccountId = null;
     }
   }
 
@@ -139,6 +182,7 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
         hashtags: hashtags,
         mediaUrl: creativeUrl.isNotEmpty ? creativeUrl : null,
         scheduledTime: scheduledTime,
+        accountId: _selectedAccountId,
       );
 
       if (res['success'] == true) {
@@ -185,6 +229,8 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final matchingAccounts = _connectedAccounts.where((acc) => acc['platform'] == platform.toLowerCase()).toList();
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -207,7 +253,12 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
                             label: 'Facebook',
                             selected: platform == 'Facebook',
                             icon: const TinyPlatformIcon(type: 'facebook'),
-                            onTap: () => setState(() => platform = 'Facebook'),
+                            onTap: () {
+                              setState(() {
+                                platform = 'Facebook';
+                                _updateSelectedAccountForPlatform('Facebook');
+                              });
+                            },
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -216,11 +267,111 @@ class _SchedulePostScreenState extends ConsumerState<SchedulePostScreen> {
                             label: 'Instagram',
                             selected: platform == 'Instagram',
                             icon: const TinyPlatformIcon(type: 'instagram'),
-                            onTap: () => setState(() => platform = 'Instagram'),
+                            onTap: () {
+                              setState(() {
+                                platform = 'Instagram';
+                                _updateSelectedAccountForPlatform('Instagram');
+                              });
+                            },
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 18),
+                    FormLabel(platform == 'Facebook' ? 'Select Facebook Page' : 'Select Instagram Profile'),
+                    if (_isLoadingAccounts) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        alignment: Alignment.centerLeft,
+                        child: const Row(
+                          children: [
+                            SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                            SizedBox(width: 10),
+                            Text('Loading connected accounts...', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                          ],
+                        ),
+                      ),
+                    ] else if (matchingAccounts.isEmpty) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF8E1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFFE082)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFF57C00), size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'No connected $platform account found. Please connect in Settings > Social Accounts.',
+                                style: const TextStyle(fontSize: 11.5, color: Color(0xFFE65100), fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedAccountId,
+                            isExpanded: true,
+                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.primary),
+                            items: matchingAccounts.map<DropdownMenuItem<String>>((acc) {
+                              return DropdownMenuItem<String>(
+                                value: acc['accountId']?.toString(),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: AppColors.lavender,
+                                      backgroundImage: acc['profilePicture'] != null ? NetworkImage(acc['profilePicture']) : null,
+                                      child: acc['profilePicture'] == null
+                                          ? Icon(
+                                              acc['platform'] == 'facebook' ? Icons.facebook : Icons.camera_alt_rounded,
+                                              color: AppColors.primary,
+                                              size: 14,
+                                            )
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        acc['accountName']?.toString() ?? 'Unnamed',
+                                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedAccountId = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     const FormLabel('Publishing Schedule'),
                     SwitchListTile(

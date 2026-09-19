@@ -26,12 +26,16 @@ class ReportService {
     String? adAccountId,
     String? socialAccountId,
     String? period,
+    String? pageId,
+    String? formId,
   }) async {
     final uri = Uri.parse('$baseUrl/api/reports/$type').replace(
       queryParameters: {
-        if (adAccountId != null) 'adAccountId': adAccountId,
-        if (socialAccountId != null) 'socialAccountId': socialAccountId,
-        if (period != null) 'period': period,
+        if (adAccountId != null && adAccountId.isNotEmpty) 'adAccountId': adAccountId,
+        if (socialAccountId != null && socialAccountId.isNotEmpty) 'socialAccountId': socialAccountId,
+        if (period != null && period.isNotEmpty) 'period': period,
+        if (pageId != null && pageId.isNotEmpty) 'pageId': pageId,
+        if (formId != null && formId.isNotEmpty) 'formId': formId,
       },
     );
     final response = await http.get(

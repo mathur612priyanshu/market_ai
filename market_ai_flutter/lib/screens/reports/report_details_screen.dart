@@ -1,12 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:open_filex/open_filex.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/report_service.dart';
-import '../../server_url.dart';
+import '../../services/report_exporter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -26,6 +22,8 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   String? _socialAccountId;
   String _socialPeriod = '30';
   List<dynamic> _adAccounts = [];
+  List<dynamic> _facebookPages = [];
+  String? _selectedPageId;
 
   @override
   void didChangeDependencies() {
@@ -37,10 +35,11 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
 
   Future<void> _fetchDetails() async {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final reportId = args?['id']?.toString() ?? 'competitor';
+    final reportId = args?['id']?.toString() ?? 'leads';
     final savedAdAccountId = args?['adAccountId']?.toString();
     final isSocial = reportId == 'social';
     final isAdsOrRoi = reportId == 'ads' || reportId == 'roi';
+    final isLeads = reportId == 'leads';
 
     setState(() {
       _isLoading = true;
@@ -84,10 +83,16 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
         adAccountId: _adAccountId,
         socialAccountId: isSocial ? _socialAccountId : null,
         period: isSocial ? _socialPeriod : null,
+        pageId: isLeads ? _selectedPageId : null,
       );
+
       if (res['success'] == true && mounted) {
+        final report = res['report'] as Map<String, dynamic>? ?? {};
+        if (isLeads && report['facebookPages'] is List) {
+          _facebookPages = report['facebookPages'] as List<dynamic>;
+        }
         setState(() {
-          _reportData = res['report'];
+          _reportData = report;
           _isLoading = false;
         });
       } else {
@@ -106,8 +111,6 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
 
   IconData _getIcon(String? iconName) {
     switch (iconName) {
-      case 'analytics_outlined':
-        return Icons.analytics_outlined;
       case 'campaign_outlined':
         return Icons.campaign_outlined;
       case 'people_outline_rounded':
@@ -123,78 +126,35 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
 
   Future<void> _downloadReport() async {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final reportId = args?['id']?.toString() ?? 'competitor';
+    final reportId = args?['id']?.toString() ?? 'leads';
+    final reportTitle = args?['title']?.toString() ?? 'Report Detail';
 
-    setState(() {
-      _isLoading = true;
-      _errorMsg = '';
-    });
-
-    try {
-      final token = ref.read(authProvider).token;
-      if (token == null) {
-        setState(() {
-          _errorMsg = 'Auth token missing';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final query = <String, String>{'adAccountId': _adAccountId ?? ''};
-      if (reportId == 'social') {
-        if (_socialAccountId != null) query['socialAccountId'] = _socialAccountId!;
-        query['period'] = _socialPeriod;
-      }
-      final uri = Uri.parse('$baseUrl/api/reports/$reportId/download').replace(queryParameters: query);
-
-      final response = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final directory = await getTemporaryDirectory();
-        final filePath = '${directory.path}/${reportId}_report_${DateTime.now().millisecondsSinceEpoch}.csv';
-        final file = File(filePath);
-        await file.writeAsBytes(response.bodyBytes);
-
-        setState(() {
-          _isLoading = false;
-        });
-
-        if (mounted) {
-          showAppSnackBar(context, 'CSV report downloaded successfully!');
-          await OpenFilex.open(filePath);
-        }
-      } else {
-        setState(() {
-          _errorMsg = 'Server returned status: ${response.statusCode}';
-          _isLoading = false;
-        });
-        if (mounted) {
-          showAppSnackBar(context, 'Failed to download report.');
-        }
-      }
-    } catch (e) {
-      setState(() {
-        _errorMsg = e.toString();
-        _isLoading = false;
-      });
-      if (mounted) {
-        showAppSnackBar(context, 'Download error: $e');
-      }
+    final token = ref.read(authProvider).token;
+    if (token == null) {
+      showAppSnackBar(context, 'Session expired. Please log in.');
+      return;
     }
+
+    await ReportExporter.exportReport(
+      context: context,
+      token: token,
+      reportType: reportId,
+      reportTitle: reportTitle,
+      adAccountId: _adAccountId,
+      socialAccountId: _socialAccountId,
+      period: _socialPeriod,
+      pageId: reportId == 'leads' ? _selectedPageId : null,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final reportId = args?['id']?.toString() ?? 'competitor';
+    final reportId = args?['id']?.toString() ?? 'leads';
     final reportTitle = args?['title']?.toString() ?? 'Report Detail';
-    final iconName = args?['iconName']?.toString() ?? 'analytics_outlined';
+    final iconName = args?['iconName']?.toString() ?? 'people_outline_rounded';
     final isSocial = reportId == 'social';
+    final isLeads = reportId == 'leads';
 
     return Scaffold(
       body: SafeArea(
@@ -202,50 +162,71 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-              child: ScreenHeader(title: reportTitle),
+              child: ScreenHeader(
+                title: reportTitle,
+                subtitle: _reportData?['period']?.toString() ?? 'Performance Report',
+                showBack: true,
+              ),
             ),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                  ? const Center(child: CircularProgressIndicator())
                   : _errorMsg.isNotEmpty
                       ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(_errorMsg, style: const TextStyle(color: AppColors.danger)),
-                              const SizedBox(height: 12),
-                              ElevatedButton(
-                                onPressed: _fetchDetails,
-                                child: const Text('Retry'),
-                              ),
-                            ],
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.error_outline_rounded, size: 40, color: AppColors.danger),
+                                const SizedBox(height: 12),
+                                Text(_errorMsg, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+                                const SizedBox(height: 16),
+                                ElevatedButton(onPressed: _fetchDetails, child: const Text('Retry')),
+                              ],
+                            ),
                           ),
                         )
                       : SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 26),
+                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 21,
-                                    backgroundColor: AppColors.lavender,
-                                    child: Icon(_getIcon(iconName), color: AppColors.primary),
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(color: AppColors.lavender, borderRadius: BorderRadius.circular(11)),
+                                    child: Icon(_getIcon(iconName), color: AppColors.primary, size: 22),
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(_reportData?['title']?.toString() ?? reportTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                                        const SizedBox(height: 3),
-                                        Text('${_reportData?['period'] ?? 'Current snapshot'} • ${_reportData?['date'] ?? ""}', style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                                        Text(reportTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Generated: ${_reportData?['date'] ?? 'Today'}',
+                                          style: const TextStyle(color: AppColors.muted, fontSize: 11.5, fontWeight: FontWeight.w600),
+                                        ),
                                       ],
                                     ),
                                   ),
                                 ],
                               ),
+                              if (isLeads) ...[
+                                const SizedBox(height: 20),
+                                _LeadReportFilters(
+                                  pages: _facebookPages,
+                                  selectedPageId: _selectedPageId,
+                                  onPageChanged: (value) {
+                                    setState(() => _selectedPageId = value);
+                                    _fetchDetails();
+                                  },
+                                ),
+                              ],
                               if (isSocial) ...[
                                 const SizedBox(height: 20),
                                 _SocialReportFilters(
@@ -344,6 +325,50 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   }
 }
 
+class _LeadReportFilters extends StatelessWidget {
+  const _LeadReportFilters({
+    required this.pages,
+    required this.selectedPageId,
+    required this.onPageChanged,
+  });
+
+  final List<dynamic> pages;
+  final String? selectedPageId;
+  final ValueChanged<String?> onPageChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Filter by Facebook Page', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey(selectedPageId),
+          initialValue: selectedPageId ?? 'all',
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem(
+              value: 'all',
+              child: Text('All Connected Pages (Aggregate)', overflow: TextOverflow.ellipsis),
+            ),
+            ...pages.map<DropdownMenuItem<String>>((page) => DropdownMenuItem(
+              value: page['id']?.toString(),
+              child: Text(page['name']?.toString() ?? 'Unnamed Page', overflow: TextOverflow.ellipsis),
+            )),
+          ],
+          onChanged: onPageChanged,
+          decoration: const InputDecoration(
+            labelText: 'Selected Page',
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SocialReportFilters extends StatelessWidget {
   const _SocialReportFilters({required this.accounts, required this.selectedAccountId, required this.period, required this.onAccountChanged, required this.onPeriodChanged});
   final List<dynamic> accounts;
@@ -407,53 +432,42 @@ class _DataStatus extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(11),
-    decoration: BoxDecoration(color: const Color(0xFFF5F3FF), borderRadius: BorderRadius.circular(10)),
-    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 18),
+    decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+    child: Row(children: [
+      const Icon(Icons.info_outline, size: 16, color: AppColors.muted),
       const SizedBox(width: 8),
-      Expanded(child: Text(message, style: const TextStyle(color: AppColors.muted, fontSize: 11.5, height: 1.35))),
+      Expanded(child: Text(message, style: const TextStyle(fontSize: 11, color: AppColors.muted, height: 1.4))),
     ]),
   );
 }
 
 class _MetricGrid extends StatelessWidget {
   const _MetricGrid({required this.metrics});
-  final List metrics;
+  final List<dynamic> metrics;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 10,
-    runSpacing: 10,
-    children: metrics.map<Widget>((raw) {
-      final item = raw as Map;
-      final tone = item['tone']?.toString();
-      final color = tone == 'positive' ? AppColors.success : tone == 'attention' ? const Color(0xFFD98200) : AppColors.primary;
-      return SizedBox(width: (MediaQuery.sizeOf(context).width - 46) / 2, child: Container(
+  Widget build(BuildContext context) => GridView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    itemCount: metrics.length,
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.45),
+    itemBuilder: (context, index) {
+      final m = Map<String, dynamic>.from(metrics[index] as Map);
+      Color valueColor = AppColors.text;
+      if (m['tone'] == 'positive') valueColor = AppColors.success;
+      if (m['tone'] == 'attention') valueColor = const Color(0xFFF59E0B);
+      return Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(item['label']?.toString() ?? '', style: const TextStyle(color: AppColors.muted, fontSize: 10.5, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 5),
-          Text(item['value']?.toString() ?? '—', style: TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.w800)),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(m['label']?.toString() ?? 'Metric', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+          const SizedBox(height: 4),
+          Text(m['value']?.toString() ?? '—', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: valueColor)),
           const SizedBox(height: 3),
-          Text(item['detail']?.toString() ?? '', style: const TextStyle(color: AppColors.muted, fontSize: 9.5), maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text(m['detail']?.toString() ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: AppColors.muted)),
         ]),
-      ));
-    }).toList(),
-  );
-}
-
-class _ActionItem extends StatelessWidget {
-  const _ActionItem({required this.text});
-  final String text;
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity, margin: const EdgeInsets.only(bottom: 9), padding: const EdgeInsets.all(11),
-    decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(10)),
-    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Icon(Icons.lightbulb_outline_rounded, color: Color(0xFFD98200), size: 18),
-      const SizedBox(width: 9), Expanded(child: Text(text, style: const TextStyle(fontSize: 11.5, height: 1.35, fontWeight: FontWeight.w600))),
-    ]),
+      );
+    },
   );
 }
 
@@ -462,24 +476,31 @@ class _Insight extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: Icon(Icons.check_circle_outline_rounded, color: AppColors.primary, size: 19),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Padding(padding: EdgeInsets.only(top: 2), child: Icon(Icons.check_circle_outline, size: 15, color: AppColors.primary)),
+      const SizedBox(width: 8),
+      Expanded(child: Text(text, style: const TextStyle(fontSize: 12, height: 1.4, color: AppColors.text))),
+    ]),
+  );
+}
+
+class _ActionItem extends StatelessWidget {
+  const _ActionItem({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Padding(padding: EdgeInsets.only(top: 2), child: Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.primary)),
+      const SizedBox(width: 8),
+      Expanded(child: Text(text, style: const TextStyle(fontSize: 11.5, height: 1.4, fontWeight: FontWeight.w600, color: AppColors.text))),
+    ]),
+  );
 }
 
 class _AdReportFilters extends StatelessWidget {
@@ -490,21 +511,21 @@ class _AdReportFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    const Text('Reporting filters', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+    const Text('Filter by Ad Account', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
     const SizedBox(height: 8),
     if (accounts.isEmpty)
-      const Text('No connected Facebook Ad Accounts found.', style: TextStyle(color: AppColors.muted, fontSize: 11.5))
+      const Text('No connected Meta ad accounts found.', style: TextStyle(color: AppColors.muted, fontSize: 11.5))
     else
       DropdownButtonFormField<String>(
         key: ValueKey(selectedAccountId),
         initialValue: selectedAccountId,
         isExpanded: true,
-        items: accounts.map<DropdownMenuItem<String>>((account) => DropdownMenuItem(
-          value: account['id']?.toString(),
-          child: Text('Ad Account • ${account['name'] ?? 'Unnamed account'}', overflow: TextOverflow.ellipsis),
+        items: accounts.map<DropdownMenuItem<String>>((acc) => DropdownMenuItem(
+          value: acc['id']?.toString(),
+          child: Text('${acc['name'] ?? 'Ad Account'} (${acc['id'] ?? ''})', overflow: TextOverflow.ellipsis),
         )).toList(),
         onChanged: onAccountChanged,
-        decoration: const InputDecoration(labelText: 'Meta Ad Account', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), border: OutlineInputBorder()),
+        decoration: const InputDecoration(labelText: 'Ad Account', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), border: OutlineInputBorder()),
       ),
   ]);
 }

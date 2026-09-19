@@ -160,38 +160,43 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                               children: [
                                 const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 20),
                                 const SizedBox(width: 8),
-                                const Text(
-                                  'MarketAI Response',
-                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.text),
+                                Expanded(
+                                  child: Text(
+                                    searchResults!['title']?.toString() ?? 'MarketAI Response',
+                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.text),
+                                  ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
                             Text(
                               searchResults!['summary']?.toString() ?? '',
-                              style: const TextStyle(fontSize: 12.5, height: 1.45, color: AppColors.text),
+                              style: const TextStyle(fontSize: 12.5, height: 1.5, color: AppColors.text),
                             ),
-                            if (searchResults!['insights'] != null) ...[
+                            if (searchResults!['insights'] != null && (searchResults!['insights'] as List).isNotEmpty) ...[
                               const SizedBox(height: 16),
                               const Divider(),
                               const SizedBox(height: 8),
                               const Text(
-                                'Key Insights',
+                                'Key Highlights & Brands',
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
                               ),
                               const SizedBox(height: 8),
                               ...(searchResults!['insights'] as List<dynamic>).map(
                                 (ins) => Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  padding: const EdgeInsets.symmetric(vertical: 5),
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 16),
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 2),
+                                        child: Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 15),
+                                      ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
                                           ins.toString(),
-                                          style: const TextStyle(fontSize: 11.5, color: AppColors.text),
+                                          style: const TextStyle(fontSize: 12, height: 1.4, color: AppColors.text),
                                         ),
                                       ),
                                     ],
@@ -199,27 +204,30 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                                 ),
                               ),
                             ],
-                            if (searchResults!['recommendations'] != null) ...[
+                            if (searchResults!['recommendations'] != null && (searchResults!['recommendations'] as List).isNotEmpty) ...[
                               const SizedBox(height: 16),
                               const Divider(),
                               const SizedBox(height: 8),
                               const Text(
-                                'Recommended Actions',
+                                'Recommendations & Buying Tips',
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
                               ),
                               const SizedBox(height: 8),
                               ...(searchResults!['recommendations'] as List<dynamic>).map(
                                 (rec) => Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  padding: const EdgeInsets.symmetric(vertical: 5),
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.tips_and_updates_outlined, color: Colors.orangeAccent, size: 16),
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 2),
+                                        child: Icon(Icons.tips_and_updates_outlined, color: Colors.orangeAccent, size: 15),
+                                      ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
                                           rec.toString(),
-                                          style: const TextStyle(fontSize: 11.5, color: AppColors.text),
+                                          style: const TextStyle(fontSize: 12, height: 1.4, color: AppColors.text),
                                         ),
                                       ),
                                     ],
@@ -230,7 +238,7 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 25),
                     ],
 
                     const Text('Try these examples', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),

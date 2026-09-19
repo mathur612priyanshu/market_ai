@@ -181,7 +181,7 @@ Return ONLY a JSON object in this exact format, with no markdown styling or mark
 // Schedules a post in the database or publishes it immediately using Meta Graph APIs
 exports.publishOrSchedulePost = async (req, res) => {
   const userId = req.user.id;
-  const { platform, caption, hashtags, mediaUrl, scheduledTime, prompt, tone, type } = req.body;
+  const { platform, caption, hashtags, mediaUrl, scheduledTime, prompt, tone, type, accountId } = req.body;
 
   if (!platform || !caption) {
     return res.status(400).json({ success: false, error: 'Platform and caption are required' });
@@ -197,9 +197,18 @@ exports.publishOrSchedulePost = async (req, res) => {
       const now = new Date();
 
       if (scheduleDate > now) {
+        let targetAccount = null;
+        if (accountId) {
+          targetAccount = await SocialAccount.findOne({ where: { userId, accountId } });
+        }
+        if (!targetAccount) {
+          targetAccount = await SocialAccount.findOne({ where: { userId, platform: targetPlatform } });
+        }
+
         const post = await ScheduledPost.create({
           userId,
           platform: targetPlatform,
+          accountId: targetAccount?.accountId || accountId || null,
           caption,
           hashtags,
           mediaUrl,
@@ -219,9 +228,13 @@ exports.publishOrSchedulePost = async (req, res) => {
     }
 
     // 2. Publish Immediately (Publish Now)
-    const account = await SocialAccount.findOne({
-      where: { userId, platform: targetPlatform }
-    });
+    let account = null;
+    if (accountId) {
+      account = await SocialAccount.findOne({ where: { userId, accountId } });
+    }
+    if (!account) {
+      account = await SocialAccount.findOne({ where: { userId, platform: targetPlatform } });
+    }
 
     if (!account) {
       return res.status(400).json({

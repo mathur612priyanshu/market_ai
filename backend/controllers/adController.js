@@ -1373,13 +1373,13 @@ exports.getRoiStats = async (req, res) => {
       console.warn('Could not fetch ad account currency for ROI:', e.message);
     }
 
-    // 2. Fetch daily breakdown insights
+    // 2. Fetch daily breakdown insights with full performance metrics
     const insightsRes = await axios.get(
       `${META_GRAPH_BASE_URL}/${cleanId}/insights`,
       {
         params: {
           date_preset: datePreset,
-          fields: 'spend,action_values',
+          fields: 'spend,action_values,actions,impressions,clicks,cpc,cpm,ctr',
           time_increment: 1,
           access_token: userToken
         }
@@ -1391,21 +1391,52 @@ exports.getRoiStats = async (req, res) => {
 
     let totalSpent = 0;
     let totalRevenue = 0;
+    let totalLeads = 0;
+    let totalClicks = 0;
+    let totalImpressions = 0;
     const chartData = [];
 
     rawData.forEach(day => {
       let daySpend = parseFloat(day.spend || 0) * rate;
-      
       let dayRevenue = 0;
+      let dayLeads = 0;
+      let dayClicks = parseInt(day.clicks || 0, 10);
+      let dayImpressions = parseInt(day.impressions || 0, 10);
+
+      // Check conversion values (ecommerce purchase, pixel purchase, etc.)
       if (day.action_values && Array.isArray(day.action_values)) {
-        const purchaseVal = day.action_values.find(v => v.action_type === 'purchase');
-        if (purchaseVal) {
-          dayRevenue = parseFloat(purchaseVal.value || 0) * rate;
-        }
+        day.action_values.forEach(v => {
+          const actionType = (v.action_type || '').toLowerCase();
+          if (
+            actionType.includes('purchase') ||
+            actionType === 'value' ||
+            actionType === 'custom_value'
+          ) {
+            dayRevenue += parseFloat(v.value || 0) * rate;
+          }
+        });
+      }
+
+      // Check leads & inquiry actions
+      if (day.actions && Array.isArray(day.actions)) {
+        day.actions.forEach(a => {
+          const actionType = (a.action_type || '').toLowerCase();
+          if (
+            actionType === 'lead' ||
+            actionType === 'onsite_conversion.lead_grouped' ||
+            actionType.includes('meta_leads') ||
+            actionType === 'onsite_conversion.total_messaging_connection'
+          ) {
+            dayLeads += parseInt(a.value || 0, 10);
+          }
+        });
       }
 
       totalSpent += daySpend;
       totalRevenue += dayRevenue;
+      totalLeads += dayLeads;
+      totalClicks += dayClicks;
+      totalImpressions += dayImpressions;
 
       // Calculate daily ROI
       const dailyRoi = daySpend > 0 ? parseFloat((dayRevenue / daySpend).toFixed(2)) : 0.0;
@@ -1422,13 +1453,18 @@ exports.getRoiStats = async (req, res) => {
         date: label,
         roi: dailyRoi,
         spend: parseFloat(daySpend.toFixed(2)),
-        revenue: parseFloat(dayRevenue.toFixed(2))
+        revenue: parseFloat(dayRevenue.toFixed(2)),
+        leads: dayLeads,
+        clicks: dayClicks,
+        impressions: dayImpressions
       });
     });
 
     // Calculate final metrics
     const roi = totalSpent > 0 ? parseFloat((totalRevenue / totalSpent).toFixed(2)) : 0.0;
     const profit = totalRevenue - totalSpent;
+    const costPerLead = totalLeads > 0 ? parseFloat((totalSpent / totalLeads).toFixed(2)) : 0.0;
+    const costPerClick = totalClicks > 0 ? parseFloat((totalSpent / totalClicks).toFixed(2)) : 0.0;
 
     return res.status(200).json({
       success: true,
@@ -1436,7 +1472,13 @@ exports.getRoiStats = async (req, res) => {
         totalSpent: parseFloat(totalSpent.toFixed(2)),
         totalRevenue: parseFloat(totalRevenue.toFixed(2)),
         roi: roi,
-        profit: parseFloat(profit.toFixed(2))
+        profit: parseFloat(profit.toFixed(2)),
+        totalLeads: totalLeads,
+        totalClicks: totalClicks,
+        totalImpressions: totalImpressions,
+        costPerLead: costPerLead,
+        costPerClick: costPerClick,
+        currency: currency
       },
       chartData: chartData
     });
@@ -1639,40 +1681,94 @@ exports.getPageForms = async (req, res) => {
       where: { userId, platform: 'facebook', accountId: pageId }
     });
 
-    if (!pageAccount) {
+    const userAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook_user' }
+    });
+
+    if (!pageAccount && !userAccount) {
       return res.status(404).json({ success: false, error: 'Facebook Page not connected or invalid.' });
     }
 
-    const response = await axios.get(
-      `${META_GRAPH_BASE_URL}/${pageId}/leadgen_forms`,
-      {
-        params: {
-          fields: 'id,name,status,created_time',
-          access_token: pageAccount.accessToken
+    const tokenToUse = pageAccount?.accessToken || userAccount?.accessToken;
+
+    let formsData = [];
+    try {
+      const response = await axios.get(
+        `${META_GRAPH_BASE_URL}/${pageId}/leadgen_forms`,
+        {
+          params: {
+            fields: 'id,name,status,created_time,leads_count',
+            access_token: tokenToUse
+          }
         }
+      );
+      formsData = response.data?.data || [];
+    } catch (apiErr) {
+      // If page token failed and we have a user token, try user token as fallback
+      if (userAccount && userAccount.accessToken !== tokenToUse) {
+        try {
+          const fallbackRes = await axios.get(
+            `${META_GRAPH_BASE_URL}/${pageId}/leadgen_forms`,
+            {
+              params: {
+                fields: 'id,name,status,created_time,leads_count',
+                access_token: userAccount.accessToken
+              }
+            }
+          );
+          formsData = fallbackRes.data?.data || [];
+        } catch (fbErr) {
+          throw apiErr;
+        }
+      } else {
+        throw apiErr;
       }
-    );
+    }
 
     return res.status(200).json({
       success: true,
-      forms: response.data?.data || []
+      forms: formsData
     });
   } catch (error) {
+    const errorObj = error.response?.data?.error;
     console.error('Error fetching page forms:', error.response?.data || error.message);
-    return res.status(500).json({ success: false, error: error.response?.data?.error?.message || error.message });
+    let userMsg = errorObj?.message || error.message;
+    if (errorObj?.code === 200 && errorObj?.message?.includes('pages_manage_ads')) {
+      userMsg = 'Meta permission "pages_manage_ads" is required to access Lead Forms for this Page. Please reconnect Facebook in Social Accounts to grant Lead Ads access.';
+    }
+    return res.status(200).json({
+      success: true,
+      forms: [],
+      warning: userMsg
+    });
   }
 };
 
 exports.syncAndListFormLeads = async (req, res) => {
   const userId = req.user.id;
   const { formId } = req.params;
+  const { pageId } = req.query;
 
   try {
-    const pageAccount = await SocialAccount.findOne({
-      where: { userId, platform: 'facebook' }
+    let pageAccount = null;
+    if (pageId) {
+      pageAccount = await SocialAccount.findOne({
+        where: { userId, platform: 'facebook', accountId: pageId }
+      });
+    }
+    if (!pageAccount) {
+      pageAccount = await SocialAccount.findOne({
+        where: { userId, platform: 'facebook' }
+      });
+    }
+
+    const userAccount = await SocialAccount.findOne({
+      where: { userId, platform: 'facebook_user' }
     });
 
-    if (!pageAccount) {
+    const accessToken = pageAccount?.accessToken || userAccount?.accessToken;
+
+    if (!accessToken) {
       const localLeads = await Lead.findAll({
         where: { userId, formId },
         order: [['submittedAt', 'DESC']]
@@ -1680,7 +1776,6 @@ exports.syncAndListFormLeads = async (req, res) => {
       return res.status(200).json({ success: true, leads: localLeads });
     }
 
-    const accessToken = pageAccount.accessToken;
     const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);
     const filterParam = encodeURIComponent(JSON.stringify([{ field: 'time_created', operator: 'GREATER_THAN', value: ninetyDaysAgo }]));
 

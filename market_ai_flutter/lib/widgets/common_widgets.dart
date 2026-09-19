@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../routes.dart';
 import '../theme/app_theme.dart';
+import '../providers/auth_provider.dart';
+import '../server_url.dart';
 
 class MarketAiLogo extends StatelessWidget {
   const MarketAiLogo({super.key, this.compact = false, this.light = false});
@@ -678,4 +682,388 @@ void showPaywallDialog(BuildContext context, String message) {
       ],
     ),
   );
+}
+
+class UserAvatar extends StatelessWidget {
+  const UserAvatar({
+    super.key,
+    this.imageUrl,
+    this.name,
+    this.size = 40,
+    this.showBorder = true,
+    this.borderWidth = 1.5,
+    this.borderColor,
+    this.backgroundColor,
+    this.iconColor,
+    this.onTap,
+    this.badge,
+  });
+
+  final String? imageUrl;
+  final String? name;
+  final double size;
+  final bool showBorder;
+  final double borderWidth;
+  final Color? borderColor;
+  final Color? backgroundColor;
+  final Color? iconColor;
+  final VoidCallback? onTap;
+  final Widget? badge;
+
+  String? _getFullImageUrl(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
+    final trimmed = path.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    final cleanBase = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    final cleanPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    return '$cleanBase$cleanPath';
+  }
+
+  String _getInitials(String? fullName) {
+    if (fullName == null || fullName.trim().isEmpty) return '';
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fullUrl = _getFullImageUrl(imageUrl);
+    final initials = _getInitials(name);
+    final defaultBg = backgroundColor ?? AppColors.primaryLight.withOpacity(0.2);
+    final defaultBorder = borderColor ?? Colors.white.withOpacity(0.4);
+
+    Widget avatarContent;
+
+    if (fullUrl != null) {
+      avatarContent = ClipOval(
+        child: Image.network(
+          fullUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildFallback(initials),
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              width: size,
+              height: size,
+              color: defaultBg,
+              child: Center(
+                child: SizedBox(
+                  width: size * 0.4,
+                  height: size * 0.4,
+                  child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    } else {
+      avatarContent = _buildFallback(initials);
+    }
+
+    Widget avatarWidget = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: defaultBg,
+        border: showBorder ? Border.all(color: defaultBorder, width: borderWidth) : null,
+      ),
+      child: avatarContent,
+    );
+
+    if (badge != null) {
+      avatarWidget = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          avatarWidget,
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: badge!,
+          ),
+        ],
+      );
+    }
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(size),
+        child: avatarWidget,
+      );
+    }
+
+    return avatarWidget;
+  }
+
+  Widget _buildFallback(String initials) {
+    if (initials.isNotEmpty) {
+      return Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: iconColor ?? AppColors.primary,
+            fontWeight: FontWeight.w800,
+            fontSize: size * 0.38,
+          ),
+        ),
+      );
+    }
+    return Center(
+      child: Icon(
+        Icons.person_rounded,
+        size: size * 0.6,
+        color: iconColor ?? AppColors.primary,
+      ),
+    );
+  }
+}
+
+class AppDrawer extends ConsumerWidget {
+  const AppDrawer({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+    final userName = user?['name']?.toString() ?? 'User';
+    final userEmail = user?['email']?.toString() ?? user?['phone']?.toString() ?? '';
+    final profilePic = user?['profilePicture']?.toString();
+    final plan = user?['plan']?.toString() ?? 'Free';
+
+    return Drawer(
+      backgroundColor: Colors.white,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 50, 20, 24),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.primaryDark, AppColors.primaryLight],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    UserAvatar(
+                      size: 56,
+                      imageUrl: profilePic,
+                      name: userName,
+                      showBorder: true,
+                      borderWidth: 2,
+                      borderColor: Colors.white,
+                      backgroundColor: Colors.white24,
+                      iconColor: Colors.white,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, AppRoutes.profile, arguments: {'isEditMode': true});
+                      },
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            userName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            userEmail,
+                            style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white30),
+                            ),
+                            child: Text(
+                              '$plan Member',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+              children: [
+                _DrawerTile(
+                  icon: Icons.home_rounded,
+                  label: 'Home Dashboard',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (route) => false);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'AI Search & Intelligence',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.aiSearch);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.post_add_rounded,
+                  label: 'AI Post Creator',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.aiPostCreator);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.description_rounded,
+                  label: 'Reports & Analytics',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.reports);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.people_rounded,
+                  label: 'Lead Generation',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.leads);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.trending_up_rounded,
+                  label: 'ROI & Ad Tracker',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.roiTracker);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.workspace_premium_rounded,
+                  label: 'Subscription Plan',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.subscription);
+                  },
+                ),
+                const Divider(height: 20, indent: 10, endIndent: 10),
+                _DrawerTile(
+                  icon: Icons.help_outline_rounded,
+                  label: 'Help & Support',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.helpSupport);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.shield_outlined,
+                  label: 'Privacy Policy',
+                  iconColor: AppColors.primary,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.privacyPolicy);
+                  },
+                ),
+                _DrawerTile(
+                  icon: Icons.settings_outlined,
+                  label: 'Settings',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.settings);
+                  },
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: ListTile(
+              onTap: () async {
+                Navigator.pop(context);
+                ref.read(authProvider.notifier).clearSession();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+                if (context.mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+                }
+              },
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              tileColor: const Color(0xFFFFF3F4),
+              leading: const Icon(Icons.logout_rounded, color: AppColors.danger, size: 21),
+              title: const Text(
+                'Logout',
+                style: TextStyle(color: AppColors.danger, fontSize: 13, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DrawerTile extends StatelessWidget {
+  const _DrawerTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      dense: true,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      leading: Icon(icon, color: iconColor ?? AppColors.text, size: 20),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: iconColor != null ? AppColors.text : AppColors.text,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.muted),
+    );
+  }
 }

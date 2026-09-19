@@ -34,7 +34,7 @@ const SocialAccount = sequelize.define('SocialAccount', {
     allowNull: false
   },
   profilePicture: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: true
   }
 }, {

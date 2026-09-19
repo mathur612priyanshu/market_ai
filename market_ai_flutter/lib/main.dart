@@ -29,6 +29,7 @@ import 'screens/reports/report_details_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/settings/subscription_plan_screen.dart';
 import 'screens/settings/help_support_screen.dart';
+import 'screens/settings/privacy_policy_screen.dart';
 import 'providers/auth_provider.dart';
 
 void main() async {
@@ -102,6 +103,7 @@ class MarketAiApp extends StatelessWidget {
         AppRoutes.settings: (_) => const SettingsScreen(),
         AppRoutes.subscription: (_) => const SubscriptionPlanScreen(),
         AppRoutes.helpSupport: (_) => const HelpSupportScreen(),
+        AppRoutes.privacyPolicy: (_) => const PrivacyPolicyScreen(),
       },
     );
   }

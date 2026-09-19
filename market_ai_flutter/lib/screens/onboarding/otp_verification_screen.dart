@@ -84,6 +84,17 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     }
   }
 
+  String? _devOtp;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map && args['otp'] != null && _devOtp == null) {
+      _devOtp = args['otp'].toString();
+    }
+  }
+
   Future<void> _resendOtp(String phone) async {
     setState(() {
       _isLoading = true;
@@ -92,6 +103,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     try {
       final data = await AuthService.sendOtp(phone);
       if (mounted) {
+        if (data['otp'] != null) {
+          setState(() {
+            _devOtp = data['otp'].toString();
+          });
+        }
         showAppSnackBar(context, data['message'] ?? 'OTP sent successfully');
       }
     } catch (e) {
@@ -109,7 +125,14 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final phone = ModalRoute.of(context)!.settings.arguments as String? ?? '1234567890';
+    final args = ModalRoute.of(context)?.settings.arguments;
+    String phone = '1234567890';
+    if (args is String) {
+      phone = args;
+    } else if (args is Map && args['phone'] != null) {
+      phone = args['phone'].toString();
+    }
+
     final formattedPhone = phone.length == 10 
         ? '${phone.substring(0, 5)} ${phone.substring(5)}'
         : phone;
@@ -142,7 +165,40 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: AppColors.muted, fontSize: 12.5, height: 1.5),
                       ),
-                      const SizedBox(height: 38),
+                      if (_devOtp != null) ...[
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: () {
+                            _otpController.text = _devOtp!;
+                            _verifyOtp(phone);
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFA5D6A7)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.touch_app_outlined, size: 15, color: Color(0xFF2E7D32)),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Your OTP: $_devOtp (Tap to Autofill)',
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF2E7D32),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 28),
                       GestureDetector(
                         onTap: () {
                           _focusNode.requestFocus();

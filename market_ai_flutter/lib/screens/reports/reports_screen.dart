@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/report_service.dart';
-import '../../server_url.dart';
+import '../../services/report_exporter.dart';
 import '../../routes.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -55,9 +54,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   }
 
   List<dynamic> get filtered {
-    if (tab == 0) return reports;
-    final category = ['Competitor', 'Ads', 'ROI', 'Leads', 'Social'][tab - 1];
-    return reports.where((report) => report['category'] == category).toList();
+    final activeReports = reports.where((report) => report['id'] != 'competitor').toList();
+    if (tab == 0) return activeReports;
+    final category = ['Ads', 'ROI', 'Leads', 'Social'][tab - 1];
+    return activeReports.where((report) => report['category'] == category).toList();
   }
 
   IconData _getIcon(String? iconName) {
@@ -80,20 +80,24 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Future<void> _downloadReport(String reportId) async {
     try {
       final token = ref.read(authProvider).token;
-      if (token == null) return;
-
-      final url = '$baseUrl/api/reports/$reportId/download?token=$token&adAccountId=${_adAccountId ?? ""}';
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (mounted) {
-          showAppSnackBar(context, 'Report download started.');
-        }
-      } else {
-        if (mounted) {
-          showAppSnackBar(context, 'Could not start download.');
-        }
+      if (token == null) {
+        showAppSnackBar(context, 'Session expired. Please log in.');
+        return;
       }
+
+      final reportObj = reports.firstWhere(
+        (r) => r['id']?.toString() == reportId,
+        orElse: () => {'title': '${reportId.toUpperCase()} Report'},
+      );
+      final reportTitle = reportObj['title']?.toString() ?? '${reportId.toUpperCase()} Report';
+
+      await ReportExporter.exportReport(
+        context: context,
+        token: token,
+        reportType: reportId,
+        reportTitle: reportTitle,
+        adAccountId: _adAccountId,
+      );
     } catch (e) {
       if (mounted) {
         showAppSnackBar(context, 'Download error: $e');
@@ -103,7 +107,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const tabs = ['All Reports', 'Competitor', 'Ads', 'ROI', 'Leads', 'Social'];
+    const tabs = ['All Reports', 'Ads', 'ROI', 'Leads', 'Social'];
     return Scaffold(
       bottomNavigationBar: const MainBottomNav(currentIndex: 1),
       body: SafeArea(

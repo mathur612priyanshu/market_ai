@@ -24,4 +24,5 @@ class AppRoutes {
   static const settings = '/settings';
   static const subscription = '/subscription';
   static const helpSupport = '/help-support';
+  static const privacyPolicy = '/privacy-policy';
 }

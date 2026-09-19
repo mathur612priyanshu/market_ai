@@ -20,10 +20,56 @@ exports.initiateFacebook = (req, res) => {
   }
 
   // Redirect to Facebook OAuth with Business Configuration ID and required Ad scopes
-  const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&state=${userId}&scope=public_profile,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_posts,read_insights,instagram_basic,instagram_content_publish,instagram_manage_insights,ads_management,ads_read`;
+  const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&config_id=${fbConfigId}&state=${userId}&scope=public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_ads,read_insights,instagram_basic,instagram_content_publish,instagram_manage_insights,ads_management,ads_read,leads_retrieval`;
   
   return res.redirect(oauthUrl);
 };
+
+// Helper to extract all Facebook Pages and linked Instagram accounts
+// Supports both classic /me/accounts and Facebook Login for Business (granular scopes)
+async function fetchManagedPagesAndInstagram(userToken, fbAppId, fbAppSecret) {
+  const pagesMap = new Map();
+
+  // 1. Try classic /me/accounts
+  try {
+    const res = await axios.get('https://graph.facebook.com/v20.0/me/accounts', {
+      params: { access_token: userToken, fields: 'id,name,access_token,category,instagram_business_account' }
+    });
+    const list = res.data?.data || [];
+    for (const p of list) {
+      if (p.id) pagesMap.set(p.id, p);
+    }
+  } catch (e) {
+    console.warn('Could not query /me/accounts:', e.message);
+  }
+
+  // 2. Query debug_token granular scopes (Facebook Login for Business assets)
+  try {
+    const debugRes = await axios.get('https://graph.facebook.com/v20.0/debug_token', {
+      params: { input_token: userToken, access_token: `${fbAppId}|${fbAppSecret}` }
+    });
+    const granularScopes = debugRes.data?.data?.granular_scopes || [];
+    const pageScope = granularScopes.find(s => s.scope === 'pages_show_list' || s.scope === 'pages_manage_posts' || s.scope === 'pages_read_engagement');
+    const targetIds = pageScope?.target_ids || [];
+
+    for (const pid of targetIds) {
+      if (!pagesMap.has(pid)) {
+        try {
+          const pRes = await axios.get(`https://graph.facebook.com/v20.0/${pid}`, {
+            params: { access_token: userToken, fields: 'id,name,access_token,category,instagram_business_account' }
+          });
+          if (pRes.data?.id) pagesMap.set(pRes.data.id, pRes.data);
+        } catch (pe) {
+          console.warn(`Could not query granular page ${pid}:`, pe.message);
+        }
+      }
+    }
+  } catch (de) {
+    console.warn('Could not inspect debug_token:', de.message);
+  }
+
+  return Array.from(pagesMap.values());
+}
 
 // Endpoint: GET /api/auth/facebook/callback
 // Callback handled by Facebook OAuth redirect
@@ -70,20 +116,24 @@ exports.facebookCallback = async (req, res) => {
   const fbAppSecret = process.env.FB_APP_SECRET;
   const redirectUri = process.env.FB_REDIRECT_URI;
 
+  if (!fbAppId || !fbAppSecret || !redirectUri) {
+    return res.status(500).send('Error: Facebook credentials or redirect URI not configured in server environment');
+  }
+
   try {
-    // 1. Exchange auth code for a short-lived user access token
+    // 1. Exchange authorization code for User Short-Lived Access Token
     const tokenResponse = await axios.get('https://graph.facebook.com/v20.0/oauth/access_token', {
       params: {
         client_id: fbAppId,
-        redirect_uri: redirectUri,
         client_secret: fbAppSecret,
+        redirect_uri: redirectUri,
         code: code
       }
     });
 
     const shortLivedToken = tokenResponse.data.access_token;
 
-    // 2. Exchange short-lived token for a 60-day Long-Lived User Access Token
+    // 2. Exchange Short-Lived Access Token for Long-Lived User Access Token (60 days validity)
     const longLivedResponse = await axios.get('https://graph.facebook.com/v20.0/oauth/access_token', {
       params: {
         grant_type: 'fb_exchange_token',
@@ -104,14 +154,8 @@ exports.facebookCallback = async (req, res) => {
       accessToken: longLivedToken
     });
 
-    // 3. Fetch user's managed Facebook Pages (contains Page Access Tokens)
-    const pagesResponse = await axios.get('https://graph.facebook.com/v20.0/me/accounts', {
-      params: {
-        access_token: longLivedToken
-      }
-    });
-
-    const pages = pagesResponse.data.data; // List of managed Facebook pages
+    // 3. Fetch user's managed Facebook Pages (supports classic & Business Login granular scopes)
+    const pages = await fetchManagedPagesAndInstagram(longLivedToken, fbAppId, fbAppSecret);
 
     if (!pages || pages.length === 0) {
       return res.status(200).send(`
@@ -133,25 +177,28 @@ exports.facebookCallback = async (req, res) => {
         platform: 'facebook',
         accountId: page.id,
         accountName: page.name,
-        accessToken: page.access_token // Page token is permanent when obtained from a long-lived user token
+        accessToken: page.access_token || longLivedToken
       });
 
       // 5. Query if there is a linked Instagram Business Account
       try {
-        const igResponse = await axios.get(`https://graph.facebook.com/v20.0/${page.id}`, {
-          params: {
-            fields: 'instagram_business_account',
-            access_token: page.access_token
-          }
-        });
+        let igId = page.instagram_business_account?.id;
+        if (!igId) {
+          const igResponse = await axios.get(`https://graph.facebook.com/v20.0/${page.id}`, {
+            params: {
+              fields: 'instagram_business_account',
+              access_token: page.access_token || longLivedToken
+            }
+          });
+          igId = igResponse.data?.instagram_business_account?.id;
+        }
 
-        const igAccount = igResponse.data.instagram_business_account;
-        if (igAccount) {
+        if (igId) {
           // 6. Fetch Instagram account username and profile details
-          const igDetailsResponse = await axios.get(`https://graph.facebook.com/v20.0/${igAccount.id}`, {
+          const igDetailsResponse = await axios.get(`https://graph.facebook.com/v20.0/${igId}`, {
             params: {
               fields: 'username,name,profile_picture_url',
-              access_token: page.access_token
+              access_token: page.access_token || longLivedToken
             }
           });
 
@@ -163,7 +210,7 @@ exports.facebookCallback = async (req, res) => {
             platform: 'instagram',
             accountId: igDetails.id,
             accountName: igDetails.username || igDetails.name,
-            accessToken: page.access_token, // Publish calls to Instagram API are made using the linked Page Access Token
+            accessToken: page.access_token || longLivedToken, // Publish calls to Instagram API are made using the linked Page Access Token
             profilePicture: igDetails.profile_picture_url
           });
         }
@@ -223,12 +270,8 @@ exports.facebookCallback = async (req, res) => {
     return res.status(500).send(`
       <html>
         <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background-color: #f7f9fc;">
-          <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-            <div style="font-size: 50px; color: #FF5A5F; margin-bottom: 15px;">✕</div>
-            <h2 style="color: #333; margin-bottom: 10px;">Authentication Failed</h2>
-            <p style="color: #666; font-size: 14px; line-height: 1.5;">We encountered an error during the authentication flow. Please try again.</p>
-            <p style="color: #999; font-size: 12px; margin-top: 30px;">Error Details: ${error.message}</p>
-          </div>
+          <h2 style="color: #FF5A5F;">OAuth Connection Failed</h2>
+          <p>${error.message}</p>
         </body>
       </html>
     `);
@@ -240,9 +283,71 @@ exports.facebookCallback = async (req, res) => {
 exports.getSocialStatus = async (req, res) => {
   const userId = req.user.id;
   try {
-    const accounts = await SocialAccount.findAll({ where: { userId } });
-    const facebookConnected = accounts.some(acc => acc.platform === 'facebook');
-    const instagramConnected = accounts.some(acc => acc.platform === 'instagram');
+    let accounts = await SocialAccount.findAll({ where: { userId } });
+    let facebookConnected = accounts.some(acc => acc.platform === 'facebook');
+    let instagramConnected = accounts.some(acc => acc.platform === 'instagram');
+
+    // Auto-Sync: If user has a valid Meta User Token but 0 pages in DB, sync from Meta Graph API live
+    const userAccount = accounts.find(acc => acc.platform === 'facebook_user');
+    if (userAccount && !facebookConnected) {
+      try {
+        const fbAppId = process.env.FB_APP_ID;
+        const fbAppSecret = process.env.FB_APP_SECRET;
+        const pages = await fetchManagedPagesAndInstagram(userAccount.accessToken, fbAppId, fbAppSecret);
+
+        for (const page of pages) {
+          await SocialAccount.upsert({
+            userId: parseInt(userId),
+            platform: 'facebook',
+            accountId: page.id,
+            accountName: page.name,
+            accessToken: page.access_token || userAccount.accessToken
+          });
+
+          // Check for linked Instagram account
+          try {
+            let igId = page.instagram_business_account?.id;
+            if (!igId) {
+              const igResponse = await axios.get(`https://graph.facebook.com/v20.0/${page.id}`, {
+                params: {
+                  fields: 'instagram_business_account',
+                  access_token: page.access_token || userAccount.accessToken
+                }
+              });
+              igId = igResponse.data?.instagram_business_account?.id;
+            }
+
+            if (igId) {
+              const igDetailsResponse = await axios.get(`https://graph.facebook.com/v20.0/${igId}`, {
+                params: {
+                  fields: 'username,name,profile_picture_url',
+                  access_token: page.access_token || userAccount.accessToken
+                }
+              });
+              const igDetails = igDetailsResponse.data;
+              await SocialAccount.upsert({
+                userId: parseInt(userId),
+                platform: 'instagram',
+                accountId: igDetails.id,
+                accountName: igDetails.username || igDetails.name,
+                accessToken: page.access_token || userAccount.accessToken,
+                profilePicture: igDetails.profile_picture_url
+              });
+            }
+          } catch (igErr) {
+            // Non-fatal IG error
+          }
+        }
+
+        if (pages.length > 0) {
+          accounts = await SocialAccount.findAll({ where: { userId } });
+          facebookConnected = accounts.some(acc => acc.platform === 'facebook');
+          instagramConnected = accounts.some(acc => acc.platform === 'instagram');
+        }
+      } catch (syncError) {
+        console.warn('Auto-sync pages from Graph API failed:', syncError.message);
+      }
+    }
 
     return res.status(200).json({
       success: true,

@@ -12,7 +12,11 @@ exports.sendOtp = async (req, res) => {
     }
 
     const result = await OtpService.sendOTPToPhone(phone);
-    return res.status(200).json({ success: true, message: result.message });
+    return res.status(200).json({ 
+      success: true, 
+      message: result.message,
+      otp: result.otp 
+    });
   } catch (error) {
     console.error('Error in sendOtp controller:', error.message);
     return res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });

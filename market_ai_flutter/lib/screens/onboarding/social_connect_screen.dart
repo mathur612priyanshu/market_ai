@@ -16,7 +16,7 @@ class SocialConnectScreen extends ConsumerStatefulWidget {
   ConsumerState<SocialConnectScreen> createState() => _SocialConnectScreenState();
 }
 
-class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> {
+class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> with WidgetsBindingObserver {
   bool facebookConnected = false;
   bool instagramConnected = false;
   bool isLoadingStatus = false;
@@ -25,9 +25,23 @@ class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkStatus();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkStatus();
+    }
   }
 
   Future<void> _checkStatus() async {

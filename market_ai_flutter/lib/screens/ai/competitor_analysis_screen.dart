@@ -909,25 +909,25 @@ class _CompetitorRow extends StatelessWidget {
       ),
       title: Text(name, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
       subtitle: Text(handle, style: const TextStyle(fontSize: 10.5, color: AppColors.muted)),
-      trailing: TextButton.icon(
-        onPressed: () async {
-          final query = Uri.encodeComponent(name);
-          final url = 'https://www.facebook.com/ads/library/?active_status=all&ad_type=all&q=$query&search_type=keyword_unordered';
-          final uri = Uri.parse(url);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          } else {
-            showAppSnackBar(context, 'Could not open Facebook Ads Library');
-          }
-        },
-        icon: const Icon(Icons.open_in_new_rounded, size: 13, color: AppColors.primary),
-        label: const Text('View Ads', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.primary)),
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          backgroundColor: AppColors.lavender,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        ),
-      ),
+      // trailing: TextButton.icon(
+      //   onPressed: () async {
+      //     final query = Uri.encodeComponent(name);
+      //     final url = 'https://www.facebook.com/ads/library/?active_status=all&ad_type=all&q=$query&search_type=keyword_unordered';
+      //     final uri = Uri.parse(url);
+      //     if (await canLaunchUrl(uri)) {
+      //       await launchUrl(uri, mode: LaunchMode.externalApplication);
+      //     } else {
+      //       showAppSnackBar(context, 'Could not open Facebook Ads Library');
+      //     }
+      //   },
+      //   icon: const Icon(Icons.open_in_new_rounded, size: 13, color: AppColors.primary),
+      //   label: const Text('View Ads', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.primary)),
+      //   style: TextButton.styleFrom(
+      //     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      //     backgroundColor: AppColors.lavender,
+      //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      //   ),
+      // ),
     );
   }
 }

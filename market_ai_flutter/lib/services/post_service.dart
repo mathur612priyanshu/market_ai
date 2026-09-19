@@ -33,6 +33,7 @@ class PostService {
     String? hashtags,
     String? mediaUrl,
     String? scheduledTime,
+    String? accountId,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/posts/schedule'),
@@ -46,6 +47,7 @@ class PostService {
         'hashtags': hashtags,
         'mediaUrl': mediaUrl,
         'scheduledTime': scheduledTime,
+        if (accountId != null && accountId.isNotEmpty) 'accountId': accountId,
       }),
     );
     return jsonDecode(response.body);

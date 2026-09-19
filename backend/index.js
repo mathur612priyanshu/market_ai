@@ -123,7 +123,7 @@ async function startServer() {
     console.log('Database connection established successfully.');
     
     // Sync models
-    await sequelize.sync(); 
+    await sequelize.sync({ alter: true }); 
     console.log('Database models synchronized.');
 
     // Seed default system configurations if missing

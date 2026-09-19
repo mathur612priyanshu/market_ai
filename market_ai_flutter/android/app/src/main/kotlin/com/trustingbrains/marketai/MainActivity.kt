@@ -1,4 +1,4 @@
-package com.example.market_ai
+package com.trustingbrains.marketai
 
 import io.flutter.embedding.android.FlutterActivity
 

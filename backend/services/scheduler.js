@@ -23,9 +23,17 @@ const checkAndPublishScheduledPosts = async () => {
 
     for (const post of pendingPosts) {
       try {
-        const account = await SocialAccount.findOne({
-          where: { userId: post.userId, platform: post.platform }
-        });
+        let account = null;
+        if (post.accountId) {
+          account = await SocialAccount.findOne({
+            where: { userId: post.userId, accountId: post.accountId }
+          });
+        }
+        if (!account) {
+          account = await SocialAccount.findOne({
+            where: { userId: post.userId, platform: post.platform }
+          });
+        }
 
         if (!account) {
           throw new Error(`No connected ${post.platform} account found for user ID ${post.userId}`);

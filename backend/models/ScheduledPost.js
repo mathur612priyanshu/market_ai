@@ -20,6 +20,10 @@ const ScheduledPost = sequelize.define('ScheduledPost', {
     type: DataTypes.STRING,
     allowNull: false // 'facebook' or 'instagram'
   },
+  accountId: {
+    type: DataTypes.STRING,
+    allowNull: true // specific Facebook Page ID or Instagram Account ID
+  },
   caption: {
     type: DataTypes.TEXT,
     allowNull: false

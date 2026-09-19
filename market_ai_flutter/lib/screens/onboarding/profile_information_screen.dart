@@ -8,7 +8,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
-import '../../server_url.dart';
 
 class ProfileInformationScreen extends ConsumerStatefulWidget {
   const ProfileInformationScreen({super.key});
@@ -54,9 +53,63 @@ class _ProfileInformationScreenState extends ConsumerState<ProfileInformationScr
     super.dispose();
   }
 
-  Future<void> _pickAndUploadImage() async {
+  Future<void> _showImagePickerOptions() async {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Update Profile Photo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.lavender,
+                  foregroundColor: AppColors.primary,
+                  child: Icon(Icons.photo_library_rounded),
+                ),
+                title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Select an existing photo from device'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _pickAndUploadImage(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.lavender,
+                  foregroundColor: AppColors.primary,
+                  child: Icon(Icons.camera_alt_rounded),
+                ),
+                title: const Text('Take a Photo', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Capture new photo with camera'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _pickAndUploadImage(ImageSource.camera);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadImage(ImageSource source) async {
     final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    final XFile? image = await picker.pickImage(
+      source: source,
+      maxWidth: 1024,
+      imageQuality: 85,
+    );
     if (image == null) return;
 
     setState(() {
@@ -79,7 +132,7 @@ class _ProfileInformationScreenState extends ConsumerState<ProfileInformationScr
         await prefs.setString('user', jsonEncode(data['user']));
 
         if (mounted) {
-          showAppSnackBar(context, 'Profile picture uploaded successfully!');
+          showAppSnackBar(context, 'Profile picture updated successfully!');
         }
       } else {
         if (mounted) {
@@ -194,44 +247,25 @@ class _ProfileInformationScreenState extends ConsumerState<ProfileInformationScr
                     alignment: Alignment.bottomCenter,
                     child: Transform.translate(
                       offset: const Offset(0, 44),
-                      child: InkWell(
-                        onTap: _isLoading ? null : _pickAndUploadImage,
-                        borderRadius: BorderRadius.circular(52),
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: 104,
-                              height: 104,
-                              decoration: BoxDecoration(
-                                color: AppColors.lavenderStrong,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 5),
-                              ),
-                              child: profilePic != null
-                                  ? ClipOval(
-                                      child: Image.network(
-                                        '$baseUrl$profilePic',
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) => const Icon(
-                                          Icons.person_rounded,
-                                          size: 75,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    )
-                                  : const Icon(Icons.person_rounded, size: 75, color: Colors.white),
-                            ),
-                            Positioned(
-                              right: 2,
-                              bottom: 6,
-                              child: Container(
-                                width: 30,
-                                height: 30,
-                                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                                child: const Icon(Icons.camera_alt_rounded, size: 15, color: Colors.white),
-                              ),
-                            ),
-                          ],
+                      child: UserAvatar(
+                        size: 104,
+                        imageUrl: profilePic,
+                        name: _nameController.text.isNotEmpty ? _nameController.text : 'User',
+                        showBorder: true,
+                        borderWidth: 4,
+                        borderColor: Colors.white,
+                        backgroundColor: AppColors.lavenderStrong,
+                        iconColor: Colors.white,
+                        onTap: _isLoading ? null : _showImagePickerOptions,
+                        badge: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
                         ),
                       ),
                     ),
