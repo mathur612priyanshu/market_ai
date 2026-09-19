@@ -71,10 +71,25 @@ class _SocialConnectScreenState extends ConsumerState<SocialConnectScreen> with 
   Future<void> _launchUrl(String urlString) async {
     final uri = Uri.parse(urlString);
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // Open in-app browser view (Chrome Custom Tabs on Android / SFSafariViewController on iOS)
+      await launchUrl(
+        uri,
+        mode: LaunchMode.inAppBrowserView,
+        browserConfiguration: const BrowserConfiguration(showTitle: true),
+      );
+      // As soon as the in-app browser returns, refresh social connection status immediately
+      await _checkStatus();
+      if (mounted && (facebookConnected || connectedAccounts.isNotEmpty)) {
+        showAppSnackBar(context, 'Social accounts synced successfully!');
+      }
     } catch (e) {
-      if (mounted) {
-        showAppSnackBar(context, 'Could not launch URL: $e');
+      // Fallback to external browser if inAppBrowserView is unsupported
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (err) {
+        if (mounted) {
+          showAppSnackBar(context, 'Could not open login page: $err');
+        }
       }
     }
   }

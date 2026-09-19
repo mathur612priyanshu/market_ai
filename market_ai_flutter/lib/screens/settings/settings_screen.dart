@@ -151,11 +151,6 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Privacy Policy',
                     onTap: () => Navigator.pushNamed(context, AppRoutes.privacyPolicy),
                   ),
-                  _SettingsTile(
-                    icon: Icons.notifications_none_rounded,
-                    label: 'Notification Preferences',
-                    onTap: () => showAppSnackBar(context, 'Notification preferences opened'),
-                  ),
                   const SizedBox(height: 13),
                   ListTile(
                     onTap: () async {

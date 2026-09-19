@@ -220,19 +220,42 @@ exports.facebookCallback = async (req, res) => {
       }
     }
 
-    // Return custom Success HTML template to browser
-    return res.status(200).send(`
-      <html>
-        <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background-color: #f7f9fc;">
-          <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-            <div style="font-size: 50px; color: #4CAF50; margin-bottom: 15px;">✓</div>
-            <h2 style="color: #333; margin-bottom: 10px;">Connection Successful!</h2>
-            <p style="color: #666; font-size: 14px; line-height: 1.5;">Your Facebook Pages and linked Instagram accounts have been connected to MarketAI.</p>
-            <p style="color: #999; font-size: 12px; margin-top: 30px;">You can now close this browser tab and return to the app.</p>
-          </div>
-        </body>
+    const successHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Connection Successful - MarketAI</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0B111E; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+          .card { background: #151D30; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 36px 24px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+          .icon-wrap { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #10B981, #059669); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 32px; }
+          h2 { margin: 0 0 10px; font-size: 22px; font-weight: 800; }
+          p { color: #94A3B8; font-size: 14px; line-height: 1.6; margin: 0 0 24px; }
+          .btn { display: inline-block; background: #6366F1; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 700; font-size: 14px; transition: all 0.2s; }
+          .btn:hover { background: #4F46E5; }
+          .note { font-size: 12px; color: #64748B; margin-top: 18px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="icon-wrap">✓</div>
+          <h2>Connected Successfully!</h2>
+          <p>Your Facebook Pages and Instagram accounts are now synced with MarketAI.</p>
+          <a href="javascript:window.close();" class="btn">Return to MarketAI</a>
+          <div class="note">Tap the ✕ button at top to close this screen.</div>
+        </div>
+        <script>
+          setTimeout(function() {
+            try { window.close(); } catch(e) {}
+          }, 2500);
+        </script>
+      </body>
       </html>
-    `);
+    `;
+
+    return res.status(200).send(successHtml);
 
   } catch (error) {
     const errorMsg = error.response?.data?.error?.message || error.message || '';
@@ -249,15 +272,31 @@ exports.facebookCallback = async (req, res) => {
         if (existingToken) {
           console.log('Authorization code already exchanged in a previous request. Gracefully redirecting to success page.');
           return res.status(200).send(`
-            <html>
-              <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background-color: #f7f9fc;">
-                <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-                  <div style="font-size: 50px; color: #4CAF50; margin-bottom: 15px;">✓</div>
-                  <h2 style="color: #333; margin-bottom: 10px;">Connection Successful!</h2>
-                  <p style="color: #666; font-size: 14px; line-height: 1.5;">Your Facebook Pages and linked Instagram accounts have been connected to MarketAI.</p>
-                  <p style="color: #999; font-size: 12px; margin-top: 30px;">You can now close this browser tab and return to the app.</p>
-                </div>
-              </body>
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Connection Successful - MarketAI</title>
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0B111E; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+                .card { background: #151D30; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 36px 24px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+                .icon-wrap { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #10B981, #059669); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 32px; }
+                h2 { margin: 0 0 10px; font-size: 22px; font-weight: 800; }
+                p { color: #94A3B8; font-size: 14px; line-height: 1.6; margin: 0 0 24px; }
+                .btn { display: inline-block; background: #6366F1; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 700; font-size: 14px; }
+                .note { font-size: 12px; color: #64748B; margin-top: 18px; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="icon-wrap">✓</div>
+                <h2>Connected Successfully!</h2>
+                <p>Your Facebook Pages and Instagram accounts are now synced with MarketAI.</p>
+                <a href="javascript:window.close();" class="btn">Return to MarketAI</a>
+                <div class="note">Tap the ✕ button at top to close this screen.</div>
+              </div>
+            </body>
             </html>
           `);
         }

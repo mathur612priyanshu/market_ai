@@ -34,17 +34,11 @@ function storeOTP(phone, otp) {
 function verifyOTP(phone, otp) {
   const normalized = normalizePhone(phone);
   
-  // Test numbers bypass
-  const testPhones = ['1234567890', '9999999999', '0000000000', '9876543210', '8888888888'];
+  // Test numbers bypass (Strictly limited to test accounts)
+  const testPhones = ['1234567890', '9999999999', '0000000000'];
   if (testPhones.includes(normalized) && (otp === '123456' || otp === '000000')) {
-    console.log(`[TEST MODE] Auto-verified test number ${normalized} with fixed OTP ${otp}`);
+    console.log(`[TEST MODE] Auto-verified test account ${normalized} with fixed OTP ${otp}`);
     return { valid: true, message: 'OTP verified successfully (Test mode)' };
-  }
-
-  // Developer master OTP for local testing
-  if (process.env.NODE_ENV !== 'production' && otp === '123456') {
-    console.log(`[DEV MASTER OTP] Auto-verified ${normalized} with developer code 123456`);
-    return { valid: true, message: 'OTP verified successfully (Dev master key)' };
   }
 
   const record = otpStorage.get(normalized);
